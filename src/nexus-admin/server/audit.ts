@@ -126,3 +126,18 @@ export function auditCsv(rows: AuditRow[]) {
   );
   return [header.map(csvCell).join(","), ...lines].join("\r\n") + "\r\n";
 }
+
+export function auditFilterFromUrl(url: URL | { searchParams: URLSearchParams }) {
+  const sp = url.searchParams;
+  const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : undefined);
+  const date = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  return {
+    companyId: num(sp.get("company")),
+    action: sp.get("action")?.replace(/[^a-z_.]/g, "") || undefined,
+    from: date(sp.get("from")),
+    to: date(sp.get("to")),
+    q: sp.get("q")?.slice(0, 100) || undefined,
+    page: num(sp.get("page")),
+  };
+}
+
