@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, IBM_Plex_Mono, Source_Sans_3 } from "next/font/google";
 import { Providers } from "@/components/providers";
-import "./globals.css";
+import "../globals.css";
 
 const display = Fraunces({
   subsets: ["latin"],
