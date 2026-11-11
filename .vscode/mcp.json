@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "nexus": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "services/mcp/server.ts"
+      ]
+    }
+  }
+}

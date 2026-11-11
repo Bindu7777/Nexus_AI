@@ -1,0 +1,39 @@
+{
+  "name": "nexus-defect-chat",
+  "displayName": "Nexus defect investigation",
+  "description": "Copilot Chat participant for the Nexus sandbox defect workflow. The rule-based engine remains the guardrail. This is not a production integration.",
+  "version": "0.1.0",
+  "publisher": "nexus-intelligence",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": ["Chat"],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onChatParticipant:nexus.investigate",
+    "onCommand:nexus.applySandboxRemediation"
+  ],
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "nexus.investigate",
+        "name": "nexus",
+        "fullName": "Nexus Intelligence",
+        "description": "Sandbox defect investigation. Not a production agent.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "investigate",
+            "description": "Investigate NI-1042 or a read-only NEX issue in the local sandbox"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "nexus.applySandboxRemediation",
+        "title": "Nexus: Apply sandbox remediation and validate"
+      }
+    ]
+  }
+}

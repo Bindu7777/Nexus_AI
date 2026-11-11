@@ -1,0 +1,27 @@
+{
+  "id": "catalog-lock-contention",
+  "name": "Catalog lock contention",
+  "summary": "Concurrent product reads queue on one exclusive lock because the slow catalog read runs inside that lock.",
+  "inspiration": "The failure mode is the same class of bug as a catalog lock-contention demo. This service is original and local. The OpenTelemetry Astronomy Shop is not running.",
+  "workMs": 80,
+  "load": {
+    "requests": 32,
+    "concurrency": 8,
+    "timeoutMs": 5000
+  },
+  "outageLoad": {
+    "requests": 8,
+    "concurrency": 4,
+    "timeoutMs": 2000
+  },
+  "products": [
+    { "id": "orion-90", "name": "Orion 90mm refractor", "sku": "NX-REF-90" },
+    { "id": "brass-sextant", "name": "Survey brass sextant", "sku": "NX-NAV-04" },
+    { "id": "lunar-atlas", "name": "Hand-inked lunar atlas", "sku": "NX-MAP-12" },
+    { "id": "campo-slice", "name": "Campo del Cielo slice", "sku": "NX-MET-02" },
+    { "id": "andromeda-chart", "name": "Andromeda star chart", "sku": "NX-MAP-07" },
+    { "id": "solar-filter", "name": "Full-aperture solar filter", "sku": "NX-OPT-19" },
+    { "id": "eq-mount", "name": "Equatorial mount head", "sku": "NX-MNT-03" },
+    { "id": "cloth-logbook", "name": "Observer's cloth logbook", "sku": "NX-LOG-01" }
+  ]
+}

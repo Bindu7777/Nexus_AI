@@ -1,0 +1,50 @@
+{
+  "name": "nexus-defect-demo",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "demo": "node scripts/demo.mjs",
+    "dev": "next dev --turbopack -H 0.0.0.0 -p 4317",
+    "catalog": "node services/catalog/server.mjs",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 4317",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "mcp": "tsx services/mcp/server.ts",
+    "mcp:inspect": "node scripts/mcp-inspect.mjs",
+    "agents:build": "node scripts/build-agents.mjs",
+    "extension:build": "node scripts/build-extension.mjs",
+    "extension:package": "npm run extension:build && cd extensions/nexus-chat && npx --yes @vscode/vsce package --allow-missing-repository --skip-license -o nexus-defect-chat.vsix"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.2",
+    "lucide-react": "^1.70.0",
+    "next": "15.5.29",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/vscode": "^1.145.0",
+    "@vscode/vsce": "^4.1.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.29",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}

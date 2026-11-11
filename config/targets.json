@@ -1,0 +1,20 @@
+{
+  "active": "sandbox-catalog",
+  "targets": [
+    {
+      "id": "sandbox-catalog",
+      "kind": "sandbox-catalog",
+      "implemented": true,
+      "baseUrlEnv": "CATALOG_URL",
+      "defaultBaseUrl": "http://127.0.0.1:4318",
+      "note": "The local catalog process started with npm run demo. Measurements come from this process only."
+    },
+    {
+      "id": "astronomy-shop",
+      "kind": "astronomy-shop",
+      "implemented": false,
+      "baseUrl": "",
+      "note": "Placeholder for a later OpenTelemetry Astronomy Shop. This demo does not start that shop and will refuse to measure this target until implemented is set true and a baseUrl is filled in by an engineer. Do not treat an empty baseUrl as a running system."
+    }
+  ]
+}
