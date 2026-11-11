@@ -50,7 +50,7 @@ function Connect() {
         {SOURCES.map((s) => (
           <li key={s.label} className="mini-row">
             <span>{s.label}</span>
-            <span className="mono" style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--cyan)" }}>
+            <span className="mono" style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--link)" }}>
               read <IconArrow className="i14" /> Nexus
             </span>
           </li>
@@ -58,7 +58,7 @@ function Connect() {
       </ul>
       <div className="mini-row" style={{ marginTop: 8 }}>
         <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span className="mono" style={{ color: "var(--cyan)" }}>
+          <span className="mono" style={{ color: "var(--link)" }}>
             PAY-1423
           </span>
           Checkout slows down under load

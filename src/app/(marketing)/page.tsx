@@ -15,6 +15,9 @@ import { Pricing } from "@/marketing/components/pricing";
 import { Problem } from "@/marketing/components/problem";
 import { FinalCta, Trust } from "@/marketing/components/sections";
 import { Ticker } from "@/marketing/components/ticker";
+import { Ambient, MotionObserver } from "@/marketing/components/motion";
+import { Safety } from "@/marketing/components/safety";
+import { IconLock } from "@/marketing/components/icons";
 import { Walkthrough } from "@/marketing/components/walkthrough";
 
 export default function HomePage() {
@@ -23,6 +26,7 @@ export default function HomePage() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
+      <Ambient />
       <Header />
       <main id="main">
         <section className="hero" id="top" aria-labelledby="hero-title">
@@ -44,11 +48,21 @@ export default function HomePage() {
               </div>
             </div>
             <div className="hero-scene-col" id="scene">
-              <HeroScene />
+              <span className="perimeter-tag">
+                <span className="live" aria-hidden="true" />
+                Running inside your network
+                <span className="sep" aria-hidden="true">·</span>
+                <IconLock />
+                Read-only
+              </span>
+              <div className="perimeter-frame">
+                <HeroScene />
+              </div>
             </div>
           </div>
         </section>
         <Ticker />
+        <Safety />
         <Problem />
         <HowItWorks />
         <Walkthrough />
@@ -64,6 +78,7 @@ export default function HomePage() {
       </main>
       <Footer />
       <PilotDialog />
+      <MotionObserver />
     </>
   );
 }

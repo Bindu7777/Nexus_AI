@@ -1,0 +1,120 @@
+/* White-and-blue look (default) plus deep-blue feature bands.
+   Light is the default theme; dark stays available from the header toggle. */
+
+:root {
+  --band: #0c1630; /* quiet sections, dark theme */
+}
+
+:root[data-theme="light"] {
+  --canvas: #f8faff;
+  --surface: #ffffff;
+  --raised: #edf2ff;
+  --border: #d3ddf7;
+  --border-soft: rgba(211, 221, 247, 0.85);
+  --band: #eef3ff;
+  --glow: rgba(59, 107, 255, 0.14);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --canvas: #f8faff;
+    --surface: #ffffff;
+    --raised: #edf2ff;
+    --border: #d3ddf7;
+    --border-soft: rgba(211, 221, 247, 0.85);
+    --band: #eef3ff;
+    --glow: rgba(59, 107, 255, 0.14);
+  }
+}
+
+.section--quiet {
+  background: var(--band);
+}
+
+/* A soft blue wash at the top of the page in the light theme */
+:root[data-theme="light"] .hero {
+  background: linear-gradient(180deg, #e6eeff 0%, rgba(248, 250, 255, 0) 85%);
+}
+:root[data-theme="light"] .ambient-light {
+  opacity: 0.16;
+}
+:root[data-theme="light"] .ambient-light--b {
+  opacity: 0.12;
+}
+
+/* ---------- Deep-blue feature band (always dark tokens inside) ---------- */
+.tone-dark {
+  color-scheme: dark;
+  --canvas: #060d1f;
+  --surface: #0c1630;
+  --raised: #132457;
+  --border: #2a4384;
+  --border-soft: rgba(42, 67, 132, 0.7);
+  --highlight: rgba(255, 255, 255, 0.08);
+  --text: #eaf1ff;
+  --muted: #a9bbe0;
+  --faint: #6f82b0;
+  --cobalt: #3b6bff;
+  --cobalt-hover: #5a82ff;
+  --link: #8fb0ff;
+  --cyan: #22d3ee;
+  --ice: #bfd4ff;
+  --amber-text: #ffb454;
+  --amber-tint: rgba(255, 180, 84, 0.12);
+  --teal: #2dd4bf;
+  --teal-tint: #0b2b3a;
+  --coral: #ff7a6b;
+  --coral-tint: #2e1a2e;
+  --shadow: 0 1px 0 var(--highlight) inset, 0 24px 60px -28px rgba(0, 0, 0, 0.6);
+  --shadow-soft: 0 1px 0 var(--highlight) inset, 0 12px 30px -20px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+}
+.safety.tone-dark {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(60% 80% at 85% 30%, rgba(34, 211, 238, 0.16), transparent 70%),
+    radial-gradient(50% 70% at 10% 90%, rgba(99, 102, 241, 0.18), transparent 70%),
+    linear-gradient(160deg, #07143a 0%, #0b2163 55%, #0a3586 100%);
+}
+.safety.tone-dark::before {
+  /* fine grid inside the band */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, rgba(191, 212, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(191, 212, 255, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent);
+}
+.safety.tone-dark .perimeter-panel {
+  background: rgba(6, 13, 31, 0.55);
+  border-color: rgba(120, 160, 255, 0.28);
+}
+
+/* ---------- Final call to action: solid blue ---------- */
+.final {
+  background: linear-gradient(135deg, #16309f 0%, #2450d8 55%, #1f6fc2 100%);
+  border: 0;
+  color: #ffffff;
+  box-shadow: 0 30px 80px -30px rgba(36, 80, 216, 0.55);
+}
+.final::before {
+  background:
+    radial-gradient(60% 90% at 100% 0%, rgba(255, 255, 255, 0.22), transparent 70%),
+    radial-gradient(50% 80% at 0% 100%, rgba(34, 211, 238, 0.25), transparent 70%);
+  opacity: 1;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.final h2 {
+  color: #ffffff;
+}
+.final p {
+  color: #dce6ff;
+}
+.final .trail-path {
+  stroke: rgba(255, 255, 255, 0.75);
+}

@@ -72,7 +72,7 @@
   --highlight: rgba(255, 255, 255, 0.9);
   --text: #0a1433;
   --muted: #4a5878;
-  --faint: #8a96b3;
+  --faint: #647190;
   --cobalt: #2547d0;
   --cobalt-hover: #3557de;
   --cobalt-pressed: #1d3bb0;
@@ -103,7 +103,7 @@
     --highlight: rgba(255, 255, 255, 0.9);
     --text: #0a1433;
     --muted: #4a5878;
-    --faint: #8a96b3;
+    --faint: #647190;
     --cobalt: #2547d0;
     --cobalt-hover: #3557de;
     --cobalt-pressed: #1d3bb0;
@@ -587,17 +587,6 @@ kbd,
   isolation: isolate;
   overflow-x: clip;
 }
-.hero::before {
-  /* dot texture, fading toward the edges */
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
-  background-size: 24px 24px;
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 60% 40%, #000 30%, transparent 75%);
-  mask-image: radial-gradient(ellipse 70% 60% at 60% 40%, #000 30%, transparent 75%);
-}
 .hero::after {
   /* cobalt glow, 12% */
   content: "";
@@ -650,11 +639,12 @@ kbd,
   content: "";
   position: absolute;
   inset: 8% 6% 4% 10%;
-  background: var(--grad);
-  filter: blur(70px);
-  opacity: 0.22;
+  background:
+    radial-gradient(closest-side at 30% 40%, rgba(59, 107, 255, 0.5), transparent),
+    radial-gradient(closest-side at 75% 65%, rgba(34, 211, 238, 0.4), transparent);
+  opacity: 0.4;
   z-index: -1;
-  border-radius: 40%;
+  inset: -6% -4% -8% -4%;
 }
 @media (max-width: 1023px) {
   .hero-copy,
@@ -697,7 +687,7 @@ kbd,
 .scene-ticket .id {
   font-family: var(--font-code);
   font-size: var(--fs-code);
-  color: var(--cyan);
+  color: var(--link);
 }
 .scene-ticket .title {
   font-weight: 600;
@@ -1029,10 +1019,6 @@ kbd,
   .scene[data-mode="tap"] .scene-continue {
     display: flex;
   }
-  /* on phones, unrevealed groups collapse so the sequence reads vertically */
-  .scene[data-mode="tap"] [data-group].is-hidden {
-    display: none;
-  }
 }
 .scene-continue {
   justify-content: center;
@@ -1133,12 +1119,12 @@ kbd,
 }
 .beat h3 {
   font-size: var(--fs-h3);
-  color: var(--faint);
+  color: var(--muted);
   transition: color 0.4s ease;
 }
 .beat p {
   margin-top: 10px;
-  color: var(--faint);
+  color: var(--muted);
   max-width: 40ch;
   transition: color 0.4s ease;
 }
@@ -1149,7 +1135,7 @@ kbd,
   color: var(--text);
 }
 .beat.is-active p {
-  color: var(--muted);
+  color: var(--text);
 }
 .beat.is-past h3 {
   color: var(--muted);
@@ -1280,7 +1266,7 @@ kbd,
 }
 .step p {
   grid-column: 2;
-  color: var(--faint);
+  color: var(--muted);
   max-width: 44ch;
   transition: color 0.4s ease;
 }
@@ -1291,7 +1277,7 @@ kbd,
   color: var(--text);
 }
 .step.is-active p {
-  color: var(--muted);
+  color: var(--text);
 }
 .steps-panel-col {
   grid-column: 7 / -1;
@@ -1314,7 +1300,7 @@ kbd,
   color: var(--muted);
 }
 .tool-line b {
-  color: var(--cyan);
+  color: var(--link);
   font-weight: 500;
 }
 .step-meter {
@@ -1470,7 +1456,7 @@ kbd,
 .walk-tab .n {
   font-family: var(--font-code);
   font-size: var(--fs-xs);
-  color: var(--faint);
+  color: var(--muted);
   padding-top: 4px;
 }
 .walk-tab .t {
@@ -1494,7 +1480,7 @@ kbd,
   box-shadow: var(--shadow-soft);
 }
 .walk-tab[aria-selected="true"] .n {
-  color: var(--cyan);
+  color: var(--link);
 }
 .walk-tab[aria-selected="true"] .t {
   color: var(--text);
@@ -2098,7 +2084,7 @@ kbd,
 .env-svg .ln {
   stroke-dasharray: var(--len, 600);
   stroke-dashoffset: var(--len, 600);
-  transition: stroke-dashoffset 1.6s var(--ease-in-out);
+  transition: stroke-dashoffset 1.1s var(--ease-in-out);
 }
 .env-svg .fade {
   opacity: 0;
@@ -2114,13 +2100,13 @@ kbd,
   transition-delay: 0.2s;
 }
 .env-svg.is-on .d2 {
-  transition-delay: 0.7s;
+  transition-delay: 0.35s;
 }
 .env-svg.is-on .d3 {
-  transition-delay: 1.2s;
+  transition-delay: 0.7s;
 }
 .env-svg.is-on .d4 {
-  transition-delay: 1.7s;
+  transition-delay: 1s;
 }
 .env-tall {
   display: none;
@@ -2322,7 +2308,7 @@ kbd,
   content: counter(trust, decimal-leading-zero);
   font-family: var(--font-code);
   font-size: var(--fs-xs);
-  color: var(--cyan);
+  color: var(--link);
   letter-spacing: 0;
 }
 @media (max-width: 1023px) {

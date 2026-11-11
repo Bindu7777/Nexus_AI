@@ -33,13 +33,13 @@ export function FinalCta() {
                 <stop offset="1" stopColor="#22D3EE" />
               </linearGradient>
             </defs>
-            <path d="M20 240 C 120 240, 140 120, 240 140 S 380 60, 480 70" fill="none" stroke="url(#trail-g)" strokeWidth="2" />
+            <path className="trail-path" d="M20 240 C 120 240, 140 120, 240 140 S 380 60, 480 70" fill="none" stroke="url(#trail-g)" strokeWidth="2" />
             {[
               [20, 240],
               [240, 140],
               [480, 70],
             ].map(([x, y], i) => (
-              <circle key={i} cx={x} cy={y} r={i === 2 ? 9 : 6} fill={i === 2 ? "#2DD4BF" : "#FFB454"} />
+              <circle key={i} className="trail-dot" cx={x} cy={y} r={i === 2 ? 9 : 6} fill={i === 2 ? "#2DD4BF" : "#FFB454"} />
             ))}
           </svg>
           <h2 id="final-title">{finalCta.headline}</h2>

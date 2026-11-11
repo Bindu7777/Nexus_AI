@@ -82,7 +82,7 @@ export function IdeMock() {
                 ))}
               </div>
               <div className="ide-result">
-                <p style={{ fontFamily: "var(--font-code)", fontSize: "0.75rem", color: "var(--cyan)" }}>Nexus · PAY-1423</p>
+                <p style={{ fontFamily: "var(--font-code)", fontSize: "0.75rem", color: "var(--link)" }}>Nexus · PAY-1423</p>
                 <p style={{ marginTop: 8, fontWeight: 600 }}>Exclusive lock held during the slow read</p>
                 <div style={{ marginTop: 10 }}>
                   <Mark kind="verified">Verified</Mark>

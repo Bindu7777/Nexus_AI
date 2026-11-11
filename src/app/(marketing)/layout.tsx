@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import { site } from "@/marketing/content";
 import "./site.css";
+import "./motion.css";
+import "./theme.css";
 
 // next/font downloads these at build time and serves them from this site.
 // The visitor's browser makes no third-party font request.
@@ -32,14 +34,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#060D1F" },
-    { media: "(prefers-color-scheme: light)", color: "#F4F7FF" },
-  ],
+  themeColor: "#F8FAFF",
 };
 
 // Applies a remembered manual theme before first paint. Runs locally; no network.
-const themeScript = `try{var t=localStorage.getItem("nexus-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+const themeScript = `document.documentElement.classList.add("js");var t=null;try{t=localStorage.getItem("nexus-theme");}catch(e){}document.documentElement.dataset.theme=t==="dark"?"dark":"light"`;
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -41,6 +41,36 @@ export const ticker = {
   ] as { id: string; what: string; status: "verified" | "abstain"; tail: string; statusText?: string }[],
 };
 
+export const safety = {
+  headline: "Stays inside your company.",
+  lead: "Nexus runs on your own machines and reads only what you connect. Your code, data and tickets stay inside your network, and nothing changes until a person says yes.",
+  points: [
+    {
+      icon: "shield",
+      title: "Inside your network",
+      body: "Runs on your infrastructure. No code or data is sent to us or to any third party. If you connect a model, it is an endpoint you host.",
+    },
+    {
+      icon: "lock",
+      title: "Read-only by design",
+      body: "Connectors can only read. They cannot push code, edit tickets, or write to your database.",
+    },
+    {
+      icon: "check",
+      title: "A person approves every change",
+      body: "A proposed fix waits at a gate until an engineer approves it. Nothing is applied on its own.",
+    },
+  ] as { icon: "shield" | "lock" | "check"; title: string; body: string }[],
+  diagram: {
+    boundary: "Your company network",
+    core: "Nexus",
+    sources: ["Code", "Tickets", "Database", "Logs", "Docs"],
+    blocked: "Blocked at the boundary",
+    outside: "Outside",
+    outsideNote: "nothing leaves",
+  },
+};
+
 export const problem = {
   headline: "Finding the cause takes longer than fixing it.",
   beats: [

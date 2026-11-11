@@ -123,6 +123,12 @@ export function Environment() {
                     markerEnd="url(#env-arr)"
                     style={{ ["--len" as string]: 260 }}
                   />
+                  {on ? (
+                    <circle r="4" fill="#FFB454" opacity="0">
+                      <animateMotion dur="2.6s" begin={`${1.8 + i * 0.5}s`} repeatCount="indefinite" path={`M196 ${y + 21} C 250 ${y + 21}, 250 210, 300 210`} />
+                      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin={`${1.8 + i * 0.5}s`} repeatCount="indefinite" />
+                    </circle>
+                  ) : null}
                 </g>
               );
             })}
@@ -174,6 +180,12 @@ export function Environment() {
               </text>
               <path d="M786 214 H 862" stroke="var(--faint)" strokeWidth="1.3" strokeDasharray="3 5" />
               <path d="M816 202 l16 24 M832 202 l-16 24" stroke="var(--coral)" strokeWidth="1.8" strokeLinecap="round" />
+              {on ? (
+                <circle cx="806" cy="214" r="4" fill="none" stroke="var(--coral)" strokeWidth="2" opacity="0">
+                  <animate attributeName="r" values="4;22" dur="2.4s" begin="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.9;0" dur="2.4s" begin="2.4s" repeatCount="indefinite" />
+                </circle>
+              ) : null}
               <text x="884" y="250" textAnchor="middle" fontSize="11" fill="var(--muted)" fontFamily="var(--font-code)">
                 nothing leaves
               </text>
