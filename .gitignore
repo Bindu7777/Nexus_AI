@@ -42,3 +42,6 @@ yarn-error.log*
 *.sln
 *.sw?
 
+
+# Local pilot-form submissions (personal data, never commit)
+/.data/

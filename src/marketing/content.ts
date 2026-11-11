@@ -61,7 +61,7 @@ export const howItWorks = {
     { title: "Collect evidence", tool: "collect_evidence", body: "Code, commits, schema, logs and docs, each kept with a reference you can open." },
     { title: "Decide a cause, or abstain", tool: "diagnose", body: "Fixed rules decide. If they do not fire, Nexus says so and lists what is missing." },
     { title: "Propose a fix", tool: "propose_remediation", body: "Only when a rule confirmed a cause. The proposal is not applied." },
-    { title: "Wait for human approval", tool: "approve", body: "Nothing changes until an engineer approves it." },
+    { title: "Wait for human approval", tool: "apply_sandbox_remediation", body: "Nothing changes until an engineer approves it." },
     { title: "Measure again to confirm", tool: "validate", body: "The same load runs again, and the before and after are compared." },
   ],
 };
@@ -69,7 +69,8 @@ export const howItWorks = {
 export const walkthrough = {
   headline: "One bug, start to finish.",
   intro: "Follow ticket PAY-1423 through the four stages of an investigation.",
-  label: "Example from the Nexus demo",
+  label: "Example walkthrough",
+  note: "Metric, log and code evidence come from the Nexus demo. Schema and doc references show connectors that are in development.",
   stages: [
     { id: "connect", title: "Connect", body: "The ticket arrives and the sources you connected light up. Nexus reads, it never writes back." },
     { id: "trace", title: "Trace", body: "Evidence is pulled from code, schema, logs and docs. Every item keeps its file, line or log reference." },

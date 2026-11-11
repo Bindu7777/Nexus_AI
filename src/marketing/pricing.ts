@@ -53,7 +53,7 @@ export const pricing = {
       features: [{ label: "Custom deployment" }, { label: "Single sign-on", status: "planned" }, { label: "Security review support" }],
       cta: { label: "Talk to us", action: "pilot" },
     },
-  ] satisfies Plan[],
+  ] as Plan[],
 };
 
 export function pilotPrice() {
