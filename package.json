@@ -14,16 +14,22 @@
     "start": "next start -H 0.0.0.0 -p 4317",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/nexus-admin/*.test.ts",
     "mcp": "tsx services/mcp/server.ts",
     "mcp:inspect": "node scripts/mcp-inspect.mjs",
     "agents:build": "node scripts/build-agents.mjs",
     "extension:build": "node scripts/build-extension.mjs",
-    "extension:package": "npm run extension:build && cd extensions/nexus-chat && npx --yes @vscode/vsce package --allow-missing-repository --skip-license -o nexus-defect-chat.vsix"
+    "extension:package": "npm run extension:build && cd extensions/nexus-chat && npx --yes @vscode/vsce package --allow-missing-repository --skip-license -o nexus-defect-chat.vsix",
+    "admin:create": "tsx scripts/nexus-admin-cli.ts create",
+    "admin:reset-password": "tsx scripts/nexus-admin-cli.ts reset",
+    "secrets:generate-key": "tsx scripts/nexus-admin-cli.ts generate-key",
+    "secrets:rotate": "tsx scripts/nexus-admin-cli.ts rotate"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@node-rs/argon2": "^2.2.2",
+    "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
     "lucide-react": "^1.70.0",
@@ -37,6 +43,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",

@@ -45,3 +45,8 @@ yarn-error.log*
 
 # Local pilot-form submissions (personal data, never commit)
 /.data/
+
+# Nexus admin database (local, contains hashes and encrypted secrets)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
