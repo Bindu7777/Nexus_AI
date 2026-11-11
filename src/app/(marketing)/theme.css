@@ -1,8 +1,20 @@
-/* White-and-blue look (default) plus deep-blue feature bands.
-   Light is the default theme; dark stays available from the header toggle. */
+/* Rich midnight-blue look (default) plus deep-blue feature bands.
+   Dark is the default theme; the white-and-blue light theme stays on the toggle. */
 
 :root {
-  --band: #0c1630; /* quiet sections, dark theme */
+  --canvas: #071230;
+  --surface: #0d1b42;
+  --raised: #132457;
+  --border: #24397a;
+  --border-soft: rgba(36, 57, 122, 0.6);
+  --band: #0a1838; /* quiet sections */
+  --glow: rgba(59, 107, 255, 0.16);
+}
+:root:not([data-theme="light"]) .hero {
+  background: radial-gradient(90% 70% at 70% 0%, rgba(59, 107, 255, 0.18), transparent 70%);
+}
+:root:not([data-theme="light"]) .ambient-light--a {
+  opacity: 0.28;
 }
 
 :root[data-theme="light"] {

@@ -34,11 +34,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F8FAFF",
+  themeColor: "#071230",
 };
 
 // Applies a remembered manual theme before first paint. Runs locally; no network.
-const themeScript = `document.documentElement.classList.add("js");var t=null;try{t=localStorage.getItem("nexus-theme");}catch(e){}document.documentElement.dataset.theme=t==="dark"?"dark":"light"`;
+const themeScript = `document.documentElement.classList.add("js");var t=null;try{t=localStorage.getItem("nexus-theme");}catch(e){}document.documentElement.dataset.theme=t==="light"?"light":"dark"`;
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
