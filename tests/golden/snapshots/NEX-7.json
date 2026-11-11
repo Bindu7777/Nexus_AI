@@ -1,0 +1,30 @@
+{
+  "measureService": {
+    "ok": true,
+    "message": "Read from Jira https://nexusintelligence.atlassian.net, project NEX (NEXUS). The Jira label nexus-demo is present, so this text is simulated sandbox data, not a customer incident. Matching sandbox scenario: none. The evidence is thin. Ask for traces, logs, or a reproduction. Do not invent cart totals or run a different scenario in their place. No evidence was inferred from the issue text.",
+    "ticket": {
+      "id": "NEX-7",
+      "source": "jira",
+      "kind": "Jira issue, sparse",
+      "title": "Some users see wrong cart totals",
+      "service": "Jira NEX",
+      "openedAt": "2026-11-01T10:10:00.000+0530",
+      "severity": "Medium",
+      "reporter": "Demo reporter",
+      "symptom": "Simulated sandbox data. Expected agent outcome: ask for more information. Evidence is thin. No traces, logs, or reproduction are attached.",
+      "ask": "Ask the engineer for traces, logs, or a reproduction. Do not invent a cause.",
+      "disclaimer": "Read from Jira https://nexusintelligence.atlassian.net, project NEX (NEXUS). The Jira label nexus-demo is present, so this text is simulated sandbox data, not a customer incident. Matching sandbox scenario: none. The evidence is thin. Ask for traces, logs, or a reproduction. Do not invent cart totals or run a different scenario in their place. No evidence was inferred from the issue text.",
+      "issueType": "Defect test",
+      "projectKey": "NEX",
+      "detail": "sparse",
+      "fallback": "none",
+      "sandboxScenario": "ask-for-info",
+      "labels": [
+        "nexus-demo"
+      ],
+      "readOnly": true
+    },
+    "run": null,
+    "skipped": true
+  }
+}
