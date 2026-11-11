@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { createDemoCatalogConnector, type CatalogTelemetry } from "../../connectors/demo-catalog";
 import { catalogJson } from "./catalog-client";
 import { diagnose, interpretValidation } from "./diagnosis";
 import { runLoad } from "./load";
 import { scenario } from "./scenario";
-import { readSourceRegion } from "./source-evidence";
 import { describeSummary, summarize } from "./stats";
 import type { DemoStore } from "./store";
 import type {
@@ -15,27 +15,10 @@ import type {
   ScenarioName,
 } from "./types";
 
-type Telemetry = {
-  logs: {
-    id: string;
-    at: string;
-    level: string;
-    traceId: string;
-    message: string;
-    fields: Record<string, unknown>;
-  }[];
-  traces: {
-    traceId: string;
-    logId: string;
-    startedAt: string;
-    durationMs: number;
-    status: number;
-    productId: string;
-    mode: string;
-    workPlacement: string;
-    spans: unknown[];
-  }[];
-};
+// Evidence enters the engine through the connector seam (connectors/). The
+// demo catalog is one connector; its telemetry and source excerpt are read
+// through it. Sandbox mode switching below stays a local sandbox control.
+type Telemetry = CatalogTelemetry;
 
 function now() {
   return new Date().toISOString();
@@ -130,6 +113,7 @@ export async function runInvestigation(options: {
   projectRoot?: string;
 }) {
   const { catalogUrl, store, run } = options;
+  const catalog = createDemoCatalogConnector({ baseUrl: catalogUrl, projectRoot: options.projectRoot });
   try {
     await catalogJson(catalogUrl, "/health");
     addTimeline(run, "Investigation started", `Run ${run.id}. Scenario ${run.scenario}. Catalog ${catalogUrl}.`);
@@ -147,7 +131,7 @@ export async function runInvestigation(options: {
         "This was requested from the outage control. The process returns HTTP 503 and does not take the catalog lock.",
       );
       run.outage = await collectPhase({ run, catalogUrl, phase: "outage", profile: scenario.outageLoad });
-      const telemetry = (await catalogJson(catalogUrl, "/admin/telemetry")) as Telemetry;
+      const telemetry: Telemetry = await catalog.telemetry();
       const evidenceIds = storeOutageEvidence(store, run, telemetry);
       run.diagnosis = diagnose({
         scenario: "outage",
@@ -189,8 +173,8 @@ export async function runInvestigation(options: {
     );
     run.incident = await collectPhase({ run, catalogUrl, phase: "incident", profile: scenario.load });
 
-    const telemetry = (await catalogJson(catalogUrl, "/admin/telemetry")) as Telemetry;
-    const evidenceIds = storeLockEvidence(store, run, telemetry, options.projectRoot);
+    const telemetry: Telemetry = await catalog.telemetry();
+    const evidenceIds = storeLockEvidence(store, run, telemetry, catalog);
     const incidentLogs = telemetry.logs.filter((log) => log.fields.mode === "incident" && log.level === "warn");
     run.diagnosis = diagnose({
       scenario: "lock",
@@ -225,7 +209,12 @@ export async function runInvestigation(options: {
   }
 }
 
-function storeLockEvidence(store: DemoStore, run: RunRecord, telemetry: Telemetry, projectRoot?: string) {
+function storeLockEvidence(
+  store: DemoStore,
+  run: RunRecord,
+  telemetry: Telemetry,
+  catalog: ReturnType<typeof createDemoCatalogConnector>,
+) {
   const createdAt = now();
   const samplesByTrace = new Map<string, Sample>();
   for (const sample of [...(run.baseline?.samples ?? []), ...(run.incident?.samples ?? [])]) {
@@ -270,7 +259,7 @@ function storeLockEvidence(store: DemoStore, run: RunRecord, telemetry: Telemetr
     );
   }
 
-  const source = readSourceRegion("readProduct", projectRoot);
+  const source = catalog.sourceRegion("readProduct");
   index.push(
     putEvidence(store, {
       id: `source:${run.id}:readProduct`,
