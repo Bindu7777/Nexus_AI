@@ -174,11 +174,6 @@ export function HowItWorks() {
         <div className="steps-panel-col" aria-hidden="true">
           <div className="panel steps-panel">
             <div className="window-bar">
-              <div className="window-dots">
-                <i />
-                <i />
-                <i />
-              </div>
               <span>Step {active + 1} of 7</span>
             </div>
             <div className="stage panel-swap" key={active}>

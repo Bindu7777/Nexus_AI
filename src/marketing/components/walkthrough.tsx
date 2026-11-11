@@ -245,11 +245,6 @@ export function Walkthrough() {
           </div>
           <div className="panel walk-stage" role="tabpanel" id="walk-panel" aria-labelledby={`walk-tab-${stages[index].id}`}>
             <div className="window-bar">
-              <div className="window-dots">
-                <i />
-                <i />
-                <i />
-              </div>
               <span className="example-label">{walkthrough.label}</span>
             </div>
             <div className="stage-body">

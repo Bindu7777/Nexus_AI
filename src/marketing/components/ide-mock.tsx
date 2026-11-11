@@ -56,11 +56,6 @@ export function IdeMock() {
               Mock-up, not an available product: an editor with a command palette where PAY-1423 is typed. The result opens beside the code, with lines 194 and 198 highlighted as cited evidence.
             </p>
             <div className="window-bar">
-              <div className="window-dots">
-                <i />
-                <i />
-                <i />
-              </div>
               <span>catalog/server.mjs</span>
               <span style={{ marginLeft: "auto" }}>Mock-up · {ide.badge}</span>
               <button
