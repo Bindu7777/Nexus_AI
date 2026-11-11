@@ -1,0 +1,337 @@
+{
+  "ticket": {
+    "id": "NEX-5",
+    "source": "jira",
+    "kind": "Jira issue",
+    "title": "Checkout p95 latency spikes to over 600 ms under load",
+    "service": "Jira NEX",
+    "openedAt": "2026-11-01T10:00:00.000+0530",
+    "severity": "High",
+    "reporter": "Demo reporter",
+    "symptom": "Simulated sandbox data. Expected agent outcome: find the cause. This is not a customer incident and it is not a measurement.",
+    "ask": "Investigate from sandbox measurements. Do not treat the Jira text as measurement evidence.",
+    "disclaimer": "Read from Jira https://nexusintelligence.atlassian.net. This adapter only sends HTTP GET. It does not write to Jira. The Jira label nexus-demo is present, so this text is simulated sandbox data, not a customer incident. Matching sandbox scenario: lock. Measure the local catalog only, then report the rule result. Do not treat the Jira wording as a measurement.",
+    "issueType": "Defect test",
+    "projectKey": "NEX",
+    "detail": "sufficient",
+    "fallback": "none",
+    "sandboxScenario": "lock",
+    "labels": [
+      "nexus-demo"
+    ],
+    "readOnly": true
+  },
+  "summaries": {
+    "baseline": {
+      "requests": 32,
+      "success": 32,
+      "errors": 0,
+      "timeouts": 0,
+      "latencyMs": {
+        "count": 32,
+        "min": 80.92,
+        "p50": 82.95,
+        "p95": 93.24,
+        "max": 93.7,
+        "mean": 84.98
+      },
+      "lockWaitMs": {
+        "count": 32,
+        "min": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "lockHoldMs": {
+        "count": 32,
+        "min": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "maxQueueDepth": 0
+    },
+    "incident": {
+      "requests": 32,
+      "success": 32,
+      "errors": 0,
+      "timeouts": 0,
+      "latencyMs": {
+        "count": 32,
+        "min": 81.88,
+        "p50": 646.72,
+        "p95": 650.6,
+        "max": 650.69,
+        "mean": 576.76
+      },
+      "lockWaitMs": {
+        "count": 32,
+        "min": 0,
+        "p50": 563.98,
+        "p95": 567.27,
+        "max": 567.71,
+        "mean": 494.29
+      },
+      "lockHoldMs": {
+        "count": 32,
+        "min": 79.62,
+        "p50": 80.68,
+        "p95": 81.5,
+        "max": 81.55,
+        "mean": 80.68
+      },
+      "maxQueueDepth": 7
+    }
+  },
+  "diagnosis": {
+    "method": "rule-based-sandbox",
+    "methodLabel": "Rule-based sandbox demonstration — not live model inference",
+    "rulesModule": "src/lib/diagnosis.ts",
+    "outcome": "lock_contention",
+    "title": "Exclusive catalog lock is serializing overlapping reads",
+    "summary": "Under the same load (32 requests, concurrency 8, client timeout 5000 ms, scheduled read 80 ms), incident p95 client latency was 650.6 ms and baseline p95 was 93.24 ms. Mean lock wait was 494.29 ms in the incident samples and 0 ms in the baseline samples. The deepest incident lock queue was 7 waiters. All three rules fired. They point at the read path that holds the exclusive lock for the 80 ms timer.",
+    "rules": [
+      {
+        "id": "p95_latency_regression",
+        "title": "Incident p95 client latency is at least double the baseline and 40 ms higher",
+        "fired": true,
+        "threshold": "incident p95 >= baseline p95 × 2 and incident p95 − baseline p95 >= 40 ms",
+        "observed": "Baseline p95 93.24 ms, incident p95 650.6 ms."
+      },
+      {
+        "id": "exclusive_lock_wait",
+        "title": "Incident mean lock wait is at least 25 ms and at least 4× the baseline",
+        "fired": true,
+        "threshold": "incident mean lock wait >= 25 ms and >= max(5 ms, baseline mean × 4)",
+        "observed": "Baseline mean lock wait 0 ms, incident mean lock wait 494.29 ms."
+      },
+      {
+        "id": "lock_queue_depth",
+        "title": "Incident lock queue reaches at least 3 waiters and exceeds baseline",
+        "fired": true,
+        "threshold": "incident max lock waiters >= 3 and greater than baseline",
+        "observed": "Baseline max lock waiters 0, incident max lock waiters 7."
+      }
+    ],
+    "citations": [
+      {
+        "evidenceId": "metric:run_golden_NEX-5:baseline",
+        "reason": "Aggregate computed from the baseline load samples."
+      },
+      {
+        "evidenceId": "metric:run_golden_NEX-5:incident",
+        "reason": "Aggregate computed from the incident load samples."
+      },
+      {
+        "evidenceId": "source:run_golden_NEX-5:readProduct",
+        "reason": "The catalog read function as it was read from services/catalog/server.mjs for this run."
+      },
+      {
+        "evidenceId": "trace:e061323d-eefd-4845-b1ad-9009a51d6240",
+        "reason": "Incident trace for cloth-logbook: lock wait 567.71 ms, client latency 649.3 ms, lock waiters at acquire 7."
+      },
+      {
+        "evidenceId": "trace:94d2a393-459b-4f62-8267-193ead641c76",
+        "reason": "Incident trace for solar-filter: lock wait 567.27 ms, client latency 650.69 ms, lock waiters at acquire 7."
+      },
+      {
+        "evidenceId": "trace:676a4f71-f13f-462a-9e99-e7c4388b5c4e",
+        "reason": "Incident trace for eq-mount: lock wait 567.12 ms, client latency 650.6 ms, lock waiters at acquire 7."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-5:log_64",
+        "reason": "Warn log recorded by the catalog. Lock wait field 567.71 ms."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-5:log_62",
+        "reason": "Warn log recorded by the catalog. Lock wait field 567.27 ms."
+      }
+    ],
+    "uncertainties": [
+      "This diagnosis is a deterministic rule set in src/lib/diagnosis.ts. No language model was called, and no model credential is configured.",
+      "The ticket shown beside this run is a seeded example. It did not arrive from Jira or any other tracker.",
+      "Every latency, lock-wait, queue, log, and trace figure is from this local catalog process on this run. None of them is a production SLO, a customer impact number, or a savings claim.",
+      "The catalog is a small original sandbox. The OpenTelemetry Astronomy Shop is not running, and these traces were not imported from it.",
+      "The slow read is a timer inside this process. It stands in for an expensive critical section. It is not a profiler capture from a customer system.",
+      "The same timer runs in baseline mode, outside the lock. The comparison isolates lock placement. It does not measure a second, unknown production bug.",
+      "Approving the proposal only flips this sandbox process to the outside-lock placement and reruns the load. That check is not a production verification."
+    ],
+    "proposal": {
+      "id": "sandbox-proposal-move-work-outside-lock",
+      "status": "not_applied",
+      "title": "Move the catalog read outside the exclusive lock",
+      "summary": "Incident mode holds one exclusive lock for the whole slow read, so overlapping callers queue. The sandbox can instead copy the in-memory product under a short lock and run the same timed read after the lock is released. That is a hypothesis to check in this process. It is not a patch applied to a production repository, and it has not been shown to fix anything outside this demo.",
+      "sandboxChange": "After engineer confirmation, the demo sends POST /admin/mode {\"mode\":\"remediated\"} to the catalog process on 127.0.0.1 only.",
+      "validationPlan": [
+        "Use the same request count, concurrency, timeout, and product mix as the investigation load.",
+        "Switch the local catalog to remediated mode only after the confirmation control in this page sends APPLY_SANDBOX_REMEDIATION.",
+        "Repeat the load against that local process.",
+        "Compare client latency, lock wait, and lock-queue depth with the incident samples kept from this investigation.",
+        "Leave the result labeled as a sandbox check. Do not open a pull request, write to a tracker, or deploy."
+      ],
+      "boundary": "Nothing in the catalog process changes until an engineer confirms it here. Reset returns the catalog to baseline mode. The demo has no path that writes outside this machine."
+    }
+  },
+  "view": {
+    "method": "rule-based-sandbox",
+    "outcome": "lock_contention",
+    "hypothesis": "Under the same load (32 requests, concurrency 8, client timeout 5000 ms, scheduled read 80 ms), incident p95 client latency was 650.6 ms and baseline p95 was 93.24 ms. Mean lock wait was 494.29 ms in the incident samples and 0 ms in the baseline samples. The deepest incident lock queue was 7 waiters. All three rules fired. They point at the read path that holds the exclusive lock for the 80 ms timer.",
+    "evidence": [
+      {
+        "evidenceId": "metric:run_golden_NEX-5:baseline",
+        "reason": "Aggregate computed from the baseline load samples."
+      },
+      {
+        "evidenceId": "metric:run_golden_NEX-5:incident",
+        "reason": "Aggregate computed from the incident load samples."
+      },
+      {
+        "evidenceId": "source:run_golden_NEX-5:readProduct",
+        "reason": "The catalog read function as it was read from services/catalog/server.mjs for this run.",
+        "path": "services/catalog/server.mjs",
+        "startLine": 76,
+        "endLine": 258
+      },
+      {
+        "evidenceId": "trace:e061323d-eefd-4845-b1ad-9009a51d6240",
+        "reason": "Incident trace for cloth-logbook: lock wait 567.71 ms, client latency 649.3 ms, lock waiters at acquire 7."
+      },
+      {
+        "evidenceId": "trace:94d2a393-459b-4f62-8267-193ead641c76",
+        "reason": "Incident trace for solar-filter: lock wait 567.27 ms, client latency 650.69 ms, lock waiters at acquire 7."
+      },
+      {
+        "evidenceId": "trace:676a4f71-f13f-462a-9e99-e7c4388b5c4e",
+        "reason": "Incident trace for eq-mount: lock wait 567.12 ms, client latency 650.6 ms, lock waiters at acquire 7."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-5:log_64",
+        "reason": "Warn log recorded by the catalog. Lock wait field 567.71 ms."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-5:log_62",
+        "reason": "Warn log recorded by the catalog. Lock wait field 567.27 ms."
+      }
+    ],
+    "confidence": "high",
+    "abstain": false,
+    "abstainReason": null,
+    "rules": [
+      {
+        "id": "p95_latency_regression",
+        "title": "Incident p95 client latency is at least double the baseline and 40 ms higher",
+        "fired": true,
+        "threshold": "incident p95 >= baseline p95 × 2 and incident p95 − baseline p95 >= 40 ms",
+        "observed": "Baseline p95 93.24 ms, incident p95 650.6 ms."
+      },
+      {
+        "id": "exclusive_lock_wait",
+        "title": "Incident mean lock wait is at least 25 ms and at least 4× the baseline",
+        "fired": true,
+        "threshold": "incident mean lock wait >= 25 ms and >= max(5 ms, baseline mean × 4)",
+        "observed": "Baseline mean lock wait 0 ms, incident mean lock wait 494.29 ms."
+      },
+      {
+        "id": "lock_queue_depth",
+        "title": "Incident lock queue reaches at least 3 waiters and exceeds baseline",
+        "fired": true,
+        "threshold": "incident max lock waiters >= 3 and greater than baseline",
+        "observed": "Baseline max lock waiters 0, incident max lock waiters 7."
+      }
+    ],
+    "uncertainties": [
+      "This diagnosis is a deterministic rule set in src/lib/diagnosis.ts. No language model was called, and no model credential is configured.",
+      "The ticket shown beside this run is a seeded example. It did not arrive from Jira or any other tracker.",
+      "Every latency, lock-wait, queue, log, and trace figure is from this local catalog process on this run. None of them is a production SLO, a customer impact number, or a savings claim.",
+      "The catalog is a small original sandbox. The OpenTelemetry Astronomy Shop is not running, and these traces were not imported from it.",
+      "The slow read is a timer inside this process. It stands in for an expensive critical section. It is not a profiler capture from a customer system.",
+      "The same timer runs in baseline mode, outside the lock. The comparison isolates lock placement. It does not measure a second, unknown production bug.",
+      "Approving the proposal only flips this sandbox process to the outside-lock placement and reruns the load. That check is not a production verification."
+    ],
+    "proposal": {
+      "id": "sandbox-proposal-move-work-outside-lock",
+      "status": "not_applied",
+      "title": "Move the catalog read outside the exclusive lock",
+      "summary": "Incident mode holds one exclusive lock for the whole slow read, so overlapping callers queue. The sandbox can instead copy the in-memory product under a short lock and run the same timed read after the lock is released. That is a hypothesis to check in this process. It is not a patch applied to a production repository, and it has not been shown to fix anything outside this demo.",
+      "sandboxChange": "After engineer confirmation, the demo sends POST /admin/mode {\"mode\":\"remediated\"} to the catalog process on 127.0.0.1 only.",
+      "validationPlan": [
+        "Use the same request count, concurrency, timeout, and product mix as the investigation load.",
+        "Switch the local catalog to remediated mode only after the confirmation control in this page sends APPLY_SANDBOX_REMEDIATION.",
+        "Repeat the load against that local process.",
+        "Compare client latency, lock wait, and lock-queue depth with the incident samples kept from this investigation.",
+        "Leave the result labeled as a sandbox check. Do not open a pull request, write to a tracker, or deploy."
+      ],
+      "boundary": "Nothing in the catalog process changes until an engineer confirms it here. Reset returns the catalog to baseline mode. The demo has no path that writes outside this machine."
+    },
+    "ticketNote": null,
+    "sandboxOnly": true
+  },
+  "proposal": {
+    "ok": true,
+    "message": "Sandbox proposal only. It is not applied.",
+    "proposal": {
+      "id": "sandbox-proposal-move-work-outside-lock",
+      "status": "not_applied",
+      "title": "Move the catalog read outside the exclusive lock",
+      "summary": "Incident mode holds one exclusive lock for the whole slow read, so overlapping callers queue. The sandbox can instead copy the in-memory product under a short lock and run the same timed read after the lock is released. That is a hypothesis to check in this process. It is not a patch applied to a production repository, and it has not been shown to fix anything outside this demo.",
+      "sandboxChange": "After engineer confirmation, the demo sends POST /admin/mode {\"mode\":\"remediated\"} to the catalog process on 127.0.0.1 only.",
+      "validationPlan": [
+        "Use the same request count, concurrency, timeout, and product mix as the investigation load.",
+        "Switch the local catalog to remediated mode only after the confirmation control in this page sends APPLY_SANDBOX_REMEDIATION.",
+        "Repeat the load against that local process.",
+        "Compare client latency, lock wait, and lock-queue depth with the incident samples kept from this investigation.",
+        "Leave the result labeled as a sandbox check. Do not open a pull request, write to a tracker, or deploy."
+      ],
+      "boundary": "Nothing in the catalog process changes until an engineer confirms it here. Reset returns the catalog to baseline mode. The demo has no path that writes outside this machine."
+    },
+    "labeledFallback": false
+  },
+  "gate": {
+    "missingToken": {
+      "ok": false,
+      "status": 400,
+      "message": "Engineer confirmation is required before the sandbox applies a behavior change."
+    },
+    "wrongToken": {
+      "ok": false,
+      "status": 400,
+      "message": "Engineer confirmation is required before the sandbox applies a behavior change."
+    },
+    "approvalPhrase": {
+      "ok": true
+    }
+  },
+  "validation": {
+    "method": "rule-based-sandbox",
+    "outcome": "sandbox_improved",
+    "checks": [
+      {
+        "id": "validation_succeeded",
+        "title": "At least 90% of remediated-sandbox requests succeeded",
+        "passed": true,
+        "observed": "32 of 32 succeeded."
+      },
+      {
+        "id": "lock_wait_dropped",
+        "title": "Mean lock wait is at most half the incident mean",
+        "passed": true,
+        "observed": "Incident mean 494.29 ms, remediated sandbox mean 0 ms."
+      },
+      {
+        "id": "p95_dropped",
+        "title": "p95 client latency is at most 75% of the incident p95",
+        "passed": true,
+        "observed": "Incident p95 650.6 ms, remediated sandbox p95 83.91 ms."
+      },
+      {
+        "id": "queue_shallower",
+        "title": "Max lock waiters is lower than in the incident run",
+        "passed": true,
+        "observed": "Incident max waiters 7, remediated sandbox max waiters 0."
+      }
+    ],
+    "statement": "On this sandbox run, remediated mode was lower on p95 client latency, mean lock wait, and max lock waiters than the incident run, with requests succeeding. That checks the lock-placement hypothesis in this process only. It is not evidence of a production fix."
+  }
+}
