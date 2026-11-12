@@ -1,10 +1,10 @@
 // Company logins (company admins and employees). Temporary passwords are shown
 // once to the Nexus admin and only their hash is stored.
 import { audit, type Actor } from "./audit";
-import { canCreateLogins, getCompany, getCompanyByCode, refreshStatus } from "./companies";
+import { canCreateLogins, getCompany, refreshStatus } from "./companies";
 import { getDb, nowIso } from "./db";
-import { burnVerifyTime, generateTemporaryPassword, hashPassword, verifyPassword } from "./passwords";
-import { createSession, revokeSubjectSessions } from "./sessions";
+import { generateTemporaryPassword, hashPassword } from "./passwords";
+import { revokeSubjectSessions } from "./sessions";
 
 export type CompanyUserRow = {
   id: number;
@@ -110,34 +110,4 @@ export function setUserDisabled(companyId: number, userId: number, disabled: boo
   audit({ actor, action: disabled ? "user.disabled" : "user.enabled", result: "ok", companyId, target: `${user.role}:${user.login_id}`, ip });
 }
 
-/**
- * Sign-in check for company logins. The company portal and IDE plugin will call
- * this later. A paused company, a disabled login or a wrong password all fail
- * with the same neutral message.
- */
-export async function authenticateCompanyUser(input: { companyCode: string; loginId: string; password: string; ip: string }) {
-  const neutral = { ok: false as const, message: "Those sign-in details did not match, or the account is not available." };
-  const company = getCompanyByCode(input.companyCode);
-  const loginId = input.loginId.includes("@") ? input.loginId.trim().toLowerCase() : input.loginId.trim();
-  const user = company
-    ? (getDb().prepare("SELECT * FROM company_users WHERE company_id = ? AND login_id = ?").get(company.id, loginId) as CompanyUserRow | undefined)
-    : undefined;
-  if (!company || !user) {
-    await burnVerifyTime(input.password);
-    return neutral;
-  }
-  const actor = { type: "company_user" as const, id: user.id, label: `${company.short_code}/${user.login_id}` };
-  if (company.status === "paused" || user.disabled_at) {
-    await burnVerifyTime(input.password);
-    audit({ actor, action: "user.sign_in_blocked", result: "denied", companyId: company.id, ip: input.ip, detail: { reason: company.status === "paused" ? "company_paused" : "login_disabled" } });
-    return neutral;
-  }
-  if (!(await verifyPassword(user.password_hash, input.password))) {
-    audit({ actor, action: "user.sign_in_failed", result: "fail", companyId: company.id, ip: input.ip });
-    return neutral;
-  }
-  getDb().prepare("UPDATE company_users SET last_used_at = ? WHERE id = ?").run(nowIso(), user.id);
-  const session = createSession({ subjectType: "company_user", subjectId: user.id, companyId: company.id, ip: input.ip });
-  audit({ actor, action: "user.sign_in", result: "ok", companyId: company.id, ip: input.ip });
-  return { ok: true as const, token: session.token, mustChangePassword: user.must_change_password === 1 };
-}
+// Company users sign in through the employee portal: see src/portal/server/auth.ts.

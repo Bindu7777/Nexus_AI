@@ -245,6 +245,15 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       CREATE INDEX company_docs_section ON company_docs (company_id, section, created_at);
     `,
   },
+  {
+    version: 6,
+    name: "employee portal sign-in: lockout",
+    sql: `
+      ALTER TABLE company_users ADD COLUMN failed_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE company_users ADD COLUMN locked_until TEXT;
+      ALTER TABLE company_users ADD COLUMN password_changed_at TEXT;
+    `,
+  },
 ];
 
 export function dbPath() {

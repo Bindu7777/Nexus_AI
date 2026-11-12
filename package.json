@@ -14,7 +14,7 @@
     "start": "next start -H 0.0.0.0 -p 4317",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/nexus-admin/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/nexus-admin/*.test.ts tests/portal/*.test.ts",
     "mcp": "tsx services/mcp/server.ts",
     "mcp:inspect": "node scripts/mcp-inspect.mjs",
     "agents:build": "node scripts/build-agents.mjs",
