@@ -25,7 +25,7 @@ export default defineConnector({
       name: "token",
       label: "Read-only access token",
       type: "secret",
-      help: "Issues: Read-only. Leave blank to reuse the GitHub code connector's token.",
+      help: "Issues: Read-only. Leave blank to reuse the GitHub code connector's token, or to read a public repository without one.",
     },
     allowInternalField,
   ],
@@ -43,10 +43,10 @@ export default defineConnector({
   capabilities: { readOnly: true, reads: ["issues", "issue comments"], transport: "http" },
   targets: (ctx) => [{ url: githubApiBase(ctx) }],
   test: async (ctx) => {
-    if (!ctx.secrets.token && !ctx.siblingSecret("github", "token")) {
-      return { ok: false, reached: [], problems: ["Enter a token, or connect GitHub as a code connector first so its token can be reused."], warnings: [] };
-    }
     const result = await connector(ctx).test();
+    if (!ctx.secrets.token && !ctx.siblingSecret("github", "token")) {
+      result.warnings.push("No token: only issues in a public repository can be read, with a low rate limit.");
+    }
     if (asList(ctx.scope.labels).length) result.reached.push(`Label filter: ${asList(ctx.scope.labels).join(", ")}`);
     return result;
   },
