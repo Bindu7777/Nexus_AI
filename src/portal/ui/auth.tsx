@@ -25,7 +25,7 @@ export function SignInForm() {
   const [code, setCode] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
-  const [company, setCompany] = useState<{ state: "idle" | "found" | "unknown"; name?: string }>({ state: "idle" });
+  const [company, setCompany] = useState<{ state: "idle" | "checking" | "found" | "unknown"; name?: string; code?: string }>({ state: "idle" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,21 +34,30 @@ export function SignInForm() {
     if (timer.current) clearTimeout(timer.current);
     const c = code.trim();
     if (c.length < 2) return setCompany({ state: "idle" });
+    setCompany({ state: "checking", code: c });
     timer.current = setTimeout(async () => {
       try {
         const r = await fetch(`/api/portal/auth/company?code=${encodeURIComponent(c)}`, { credentials: "same-origin" });
         const data = (await r.json()) as { ok: boolean; name?: string | null };
-        setCompany(data.ok && data.name ? { state: "found", name: data.name } : { state: "unknown" });
+        if (!data.ok) return setCompany({ state: "idle" }); // rate limited: let the server decide
+        setCompany(data.name ? { state: "found", name: data.name, code: c } : { state: "unknown", code: c });
       } catch {
         setCompany({ state: "idle" });
       }
-    }, 350);
+    }, 300);
   }, [code]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (!code.trim() || !employeeId.trim() || !password) return setError("Enter your company code, employee ID and password.");
+    if (company.state === "unknown" && company.code === code.trim()) {
+      return setError(
+        /^\d+$/.test(code.trim())
+          ? `"${code.trim()}" looks like an employee ID. The company code is the short code your company admin gave you, for example HM.`
+          : `There is no live company with the code "${code.trim()}". Check the code with your company admin.`,
+      );
+    }
     setBusy(true);
     const r = await postJson("/api/portal/auth/login", { companyCode: code, employeeId, password });
     setBusy(false);
@@ -68,12 +77,28 @@ export function SignInForm() {
       </div>
       <div className="field">
         <label htmlFor="si-code">Company code</label>
-        <input id="si-code" className="input" autoComplete="organization" autoCapitalize="characters" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="HM" aria-describedby="si-code-echo" />
+        <input
+          id="si-code"
+          name="company-code"
+          className="input"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="For example HM"
+          aria-describedby="si-code-help si-code-echo"
+        />
+        <span id="si-code-help" className="help">Your company&apos;s short code, not your employee ID.</span>
         <div id="si-code-echo" className="company-echo" aria-live="polite">
           {company.state === "found" ? (
             <span className="tag tag-ok"><ICheck />{company.name}</span>
           ) : company.state === "unknown" ? (
-            <span className="muted small">No live company found for this code yet. Check it with your company admin.</span>
+            <span className="small" style={{ color: "var(--amber-text)" }}>
+              {/^\d+$/.test(company.code ?? "")
+                ? "That looks like an employee ID. Enter the company code here, for example HM."
+                : "No live company has this code. Check it with your company admin."}
+            </span>
           ) : null}
         </div>
       </div>
