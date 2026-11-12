@@ -1,5 +1,5 @@
 import { adminRoute, bad, body, idParam, ok } from "@/nexus-admin/server/api";
-import { getCompany, linkPlanEntry } from "@/nexus-admin/server/companies";
+import { appendPlanEntry, getCompany, linkPlanEntry } from "@/nexus-admin/server/companies";
 import { addConnector, listCompanyConnectors } from "@/nexus-admin/server/connectors";
 
 export const runtime = "nodejs";
@@ -33,6 +33,14 @@ export async function POST(request: Request, { params }: Ctx) {
     });
     if (!result.ok) return bad("Check the highlighted fields.", { fields: result.errors });
     if (typeof b.planKey === "string") linkPlanEntry(companyId, b.planKey, result.connector.id);
+    else {
+      appendPlanEntry(companyId, {
+        category: result.connector.category,
+        registryId: result.connector.registryId,
+        deployment: result.connector.deployment,
+        connectorId: result.connector.id,
+      });
+    }
     return ok({ connector: result.connector });
   });
 }

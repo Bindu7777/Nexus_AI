@@ -538,54 +538,49 @@ export function TestAllButton({ companyId, disabled }: { companyId: number; disa
 export function ToolPicker({ companyId, categories, models, plan, nextHref }: { companyId: number; categories: Category[]; models: FormModel[]; plan: ToolPlan; nextHref: string }) {
   const { csrf } = useAdmin();
   const router = useRouter();
-  const [entries, setEntries] = useState<ToolPlanEntry[]>(plan.entries);
-  const [other, setOther] = useState(plan.other);
-  const [none, setNone] = useState<string[]>(plan.none);
-  const [choice, setChoice] = useState<Record<string, string>>({});
-  const [otherText, setOtherText] = useState<Record<string, string>>({});
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<ToolPlan>({ entries: plan.entries, other: plan.other, none: plan.none });
+  const [otherFor, setOtherFor] = useState<string | null>(null);
+  const [otherText, setOtherText] = useState("");
+  const [status, setStatus] = useState<{ tone: "ok" | "bad" | "busy"; text: string } | null>(null);
   const byId = new Map(models.map((m) => [m.id, m]));
 
-  function add(category: string) {
-    const pick = choice[category] ?? "";
-    if (pick === "__none") {
-      setNone([...new Set([...none, category])]);
-      return;
-    }
-    if (pick === "__other") {
-      const text = (otherText[category] ?? "").trim();
-      if (!text) return setMsg("Tell us which tool, in the box beside the menu.");
-      setOther([...other, { category, text }]);
-      setOtherText({ ...otherText, [category]: "" });
-      return;
-    }
-    const m = byId.get(pick);
-    if (!m) return;
-    setNone(none.filter((n) => n !== category));
-    setEntries([...entries, { key: Math.random().toString(36).slice(2, 10), category, registryId: m.id, deployment: m.deployments[0], label: "" }]);
+  /** Every change is saved at once, so leaving the page never loses a pick. */
+  async function persist(next: ToolPlan, note: string) {
+    setState(next);
+    setStatus({ tone: "busy", text: "Saving…" });
+    const r = await adminFetch<{ toolPlan: ToolPlan }>(csrf, `/api/nexus-admin/companies/${companyId}`, "PATCH", { toolPlan: next });
+    if (!r.ok) return setStatus({ tone: "bad", text: `Not saved: ${r.error}` });
+    setState(r.toolPlan);
+    setStatus({ tone: "ok", text: note });
+    router.refresh();
   }
 
-  async function save() {
-    setBusy(true);
-    setMsg("");
-    const r = await adminFetch<{ toolPlan: ToolPlan }>(csrf, `/api/nexus-admin/companies/${companyId}`, "PATCH", { toolPlan: { entries, other, none } });
-    setBusy(false);
-    if (!r.ok) return setMsg(r.error);
-    router.push(nextHref);
-    router.refresh();
+  function pick(category: string, value: string) {
+    if (!value) return;
+    if (value === "__other") {
+      setOtherFor(category);
+      setOtherText("");
+      return;
+    }
+    if (value === "__none") {
+      return persist({ ...state, none: [...new Set([...state.none, category])] }, "Saved: none for this area.");
+    }
+    const m = byId.get(value);
+    if (!m) return;
+    const entry: ToolPlanEntry = { key: Math.random().toString(36).slice(2, 10), category, registryId: m.id, deployment: m.deployments[0], label: "" };
+    return persist({ ...state, entries: [...state.entries, entry], none: state.none.filter((n) => n !== category) }, `Saved: ${m.displayName} added.`);
   }
 
   return (
     <div className="stack">
       <p className="muted">
-        For each area, choose what this company uses. A category can hold more than one tool, for example two code hosts. Ask the customer; the list is a build plan, not a guess.
+        For each area, choose what this company uses. A category can hold more than one tool, for example two code hosts. Each choice is saved as soon as you make it.
       </p>
       {categories.map((cat) => {
         const options = models.filter((m) => m.category === cat.id);
-        const chosen = entries.filter((e) => e.category === cat.id);
-        const others = other.filter((o) => o.category === cat.id);
-        const isNone = none.includes(cat.id) && chosen.length === 0;
+        const chosen = state.entries.filter((e) => e.category === cat.id);
+        const others = state.other.filter((o) => o.category === cat.id);
+        const isNone = state.none.includes(cat.id) && chosen.length === 0;
         return (
           <section key={cat.id} className="card card-pad stack" aria-labelledby={`cat-${cat.id}`}>
             <div className="spread">
@@ -602,14 +597,17 @@ export function ToolPicker({ companyId, categories, models, plan, nextHref }: { 
                   <span>
                     <strong>{m?.displayName ?? e.registryId}</strong>
                     {m?.status === "planned" ? <span className="chip chip-neutral" style={{ marginLeft: 8 }}><IClock />Coming soon</span> : null}
+                    {e.connectorId ? <span className="chip chip-ok" style={{ marginLeft: 8 }}><ICheck />Set up</span> : null}
                   </span>
                   <span className="row">
-                    {m && m.deployments.length > 1 ? (
+                    {m && m.deployments.length > 1 && !e.connectorId ? (
                       <select
                         className="input"
                         aria-label={`Deployment for ${m.displayName}`}
                         value={e.deployment}
-                        onChange={(ev) => setEntries(entries.map((x) => (x.key === e.key ? { ...x, deployment: ev.target.value as Deployment } : x)))}
+                        onChange={(ev) =>
+                          persist({ ...state, entries: state.entries.map((x) => (x.key === e.key ? { ...x, deployment: ev.target.value as Deployment } : x)) }, "Saved.")
+                        }
                         style={{ width: "auto" }}
                       >
                         {m.deployments.map((d) => <option key={d} value={d}>{d === "cloud" ? "Cloud" : "Self-hosted"}</option>)}
@@ -617,7 +615,12 @@ export function ToolPicker({ companyId, categories, models, plan, nextHref }: { 
                     ) : (
                       <span className="muted small">{e.deployment === "cloud" ? "Cloud" : "Self-hosted"}</span>
                     )}
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEntries(entries.filter((x) => x.key !== e.key))} aria-label={`Remove ${m?.displayName ?? e.registryId}`}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => persist({ ...state, entries: state.entries.filter((x) => x.key !== e.key) }, `Saved: ${m?.displayName ?? e.registryId} removed from the list.`)}
+                      aria-label={`Remove ${m?.displayName ?? e.registryId}`}
+                    >
                       Remove
                     </button>
                   </span>
@@ -627,7 +630,7 @@ export function ToolPicker({ companyId, categories, models, plan, nextHref }: { 
             {others.map((o, i) => (
               <div key={`o-${i}`} className="row" style={{ justifyContent: "space-between" }}>
                 <span>Other: <strong>{o.text}</strong> <span className="muted small">(noted for the roadmap)</span></span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOther(other.filter((x) => x !== o))}>Remove</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => persist({ ...state, other: state.other.filter((x) => x !== o) }, "Saved.")}>Remove</button>
               </div>
             ))}
             <div className="row">
@@ -635,10 +638,10 @@ export function ToolPicker({ companyId, categories, models, plan, nextHref }: { 
                 className="input"
                 style={{ width: "auto", minWidth: 260 }}
                 aria-label={`Add a ${cat.title.toLowerCase()} tool`}
-                value={choice[cat.id] ?? ""}
-                onChange={(e) => setChoice({ ...choice, [cat.id]: e.target.value })}
+                value=""
+                onChange={(e) => pick(cat.id, e.target.value)}
               >
-                <option value="">Choose…</option>
+                <option value="">{chosen.length ? "Add another…" : "Choose a tool…"}</option>
                 <optgroup label="Available">
                   {options.filter((m) => m.status === "available").map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
                 </optgroup>
@@ -648,23 +651,95 @@ export function ToolPicker({ companyId, categories, models, plan, nextHref }: { 
                 <option value="__none">None</option>
                 <option value="__other">Other (tell us)</option>
               </select>
-              {choice[cat.id] === "__other" ? (
-                <input className="input" style={{ width: 220 }} aria-label="Which tool?" placeholder="Which tool?" value={otherText[cat.id] ?? ""} onChange={(e) => setOtherText({ ...otherText, [cat.id]: e.target.value })} />
+              {otherFor === cat.id ? (
+                <>
+                  <input className="input" style={{ width: 220 }} aria-label="Which tool?" placeholder="Which tool?" value={otherText} onChange={(e) => setOtherText(e.target.value)} autoFocus />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={!otherText.trim()}
+                    onClick={() => {
+                      setOtherFor(null);
+                      void persist({ ...state, other: [...state.other, { category: cat.id, text: otherText.trim() }] }, "Saved.");
+                    }}
+                  >
+                    <IPlus /> Add
+                  </button>
+                </>
               ) : null}
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => add(cat.id)} disabled={!choice[cat.id]}>
-                <IPlus /> Add
-              </button>
             </div>
           </section>
         );
       })}
-      {msg ? <p className="callout bad" role="alert"><IX />{msg}</p> : null}
+      {status ? (
+        <p className={`callout ${status.tone === "bad" ? "bad" : status.tone === "ok" ? "ok" : ""}`} role={status.tone === "bad" ? "alert" : "status"} aria-live="polite">
+          {status.tone === "bad" ? <IX /> : status.tone === "ok" ? <ICheck /> : <span className="spin" aria-hidden="true" />}
+          {status.text}
+        </p>
+      ) : null}
       <div className="row">
-        <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
-          {busy ? <span className="spin" aria-hidden="true" /> : null}Save and continue
+        <button type="button" className="btn btn-primary" onClick={() => router.push(nextHref)}>
+          Continue to credentials
         </button>
         <span className="muted small">Code and defects tools are required to create logins and go live.</span>
       </div>
     </div>
+  );
+}
+
+// ---------- add a connector directly (company page) ----------
+
+export function AddConnectorPanel({ companyId, categories, models }: { companyId: number; categories: Category[]; models: FormModel[] }) {
+  const [chosen, setChosen] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const model = models.find((m) => m.id === chosen);
+  return (
+    <section className="card card-pad stack" aria-labelledby="add-connector">
+      <div>
+        <h2 id="add-connector" style={{ margin: 0 }}>Add a connector</h2>
+        <p className="muted small" style={{ margin: "4px 0 0" }}>Pick a tool, enter its credentials and scope, save, then test it below.</p>
+      </div>
+      <div className="row">
+        <label className="sr-only" htmlFor="add-connector-pick">Tool</label>
+        <select
+          id="add-connector-pick"
+          className="input"
+          style={{ width: "auto", minWidth: 300 }}
+          value={chosen}
+          onChange={(e) => {
+            setChosen(e.target.value);
+            setDone(null);
+          }}
+        >
+          <option value="">Choose a tool…</option>
+          {categories.map((cat) => (
+            <optgroup key={cat.id} label={cat.title}>
+              {models
+                .filter((m) => m.category === cat.id)
+                .sort((a, b) => (a.status === b.status ? a.displayName.localeCompare(b.displayName) : a.status === "available" ? -1 : 1))
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}
+                    {m.status === "planned" ? " (coming soon)" : ""}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+        {chosen ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => setChosen("")}>Cancel</button> : null}
+      </div>
+      {done ? <p className="callout ok" role="status"><ICheck />{done} saved. Test it in its card below to make it active.</p> : null}
+      {model ? (
+        <ConnectorForm
+          key={model.id}
+          companyId={companyId}
+          model={model}
+          onSaved={() => {
+            setDone(model.displayName);
+            setChosen("");
+          }}
+        />
+      ) : null}
+    </section>
   );
 }

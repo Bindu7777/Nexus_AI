@@ -5,14 +5,14 @@ import { registry } from "@/nexus-admin/connectors/registry";
 import { CATEGORIES } from "@/nexus-admin/connectors/types";
 import { getApplication } from "@/nexus-admin/server/application";
 import { queryAudit } from "@/nexus-admin/server/audit";
-import { canCreateLogins, displayStatus, getCompany, goLiveBlockers } from "@/nexus-admin/server/companies";
+import { canCreateLogins, displayStatus, getCompany, getToolPlan, goLiveBlockers } from "@/nexus-admin/server/companies";
 import { listCompanyConnectors } from "@/nexus-admin/server/connectors";
 import { requireAdminPage } from "@/nexus-admin/server/page-guard";
 import { listUsers } from "@/nexus-admin/server/users";
 import { ApplicationPanel, KtCard } from "@/nexus-admin/ui/application";
 import { CompanyStatusChip, fmtTime, ResultChip } from "@/nexus-admin/ui/chips";
 import { GoLiveButton, PauseResume, UsersPanel } from "@/nexus-admin/ui/company";
-import { ConnectorCard, HealthDots, TestAllButton } from "@/nexus-admin/ui/connectors";
+import { AddConnectorPanel, ConnectorCard, ConnectorForm, HealthDots, TestAllButton } from "@/nexus-admin/ui/connectors";
 import { IClock, IPlus } from "@/nexus-admin/ui/icons";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +79,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
             <span className="row">
               <Link className="btn btn-primary" href={`${base}?tab=kt`}><IPlus />Upload KT files</Link>
               <Link className="btn btn-ghost" href={`${base}?tab=application`}>Application and docs</Link>
-              <Link className="btn btn-ghost" href={`/nexus-admin/onboard/${company.id}/tools`}>Connect database or logs</Link>
+              <Link className="btn btn-ghost" href={`${base}?tab=health`}>Connect database or logs</Link>
             </span>
           </section>
           <section className="card card-pad">
@@ -110,10 +110,35 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
               One card per connector. Changing a credential or scope needs a fresh passing test before it takes effect; the old value stays active until then.
             </p>
             <span className="row">
-              <Link className="btn btn-ghost" href={`/nexus-admin/onboard/${company.id}/tools`}><IPlus />Add a tool</Link>
               <TestAllButton companyId={company.id} disabled={connectors.length === 0} />
             </span>
           </div>
+          <AddConnectorPanel companyId={company.id} categories={[...CATEGORIES]} models={models} />
+          {(() => {
+            const ids = new Set(connectors.map((c) => c.id));
+            const waiting = getToolPlan(company.id).entries.filter((e) => !e.connectorId || !ids.has(e.connectorId));
+            if (!waiting.length) return null;
+            return (
+              <div className="stack">
+                <h2 style={{ margin: "8px 0 0" }}>Picked, not set up yet</h2>
+                {waiting.map((e) => {
+                  const model = models.find((m) => m.id === e.registryId);
+                  if (!model) return null;
+                  return (
+                    <section key={e.key} className="card card-pad stack" aria-label={`Set up ${model.displayName}`}>
+                      <div className="spread">
+                        <h3 style={{ margin: 0 }}>
+                          {model.displayName} <span className="muted small">· {CATEGORIES.find((c) => c.id === e.category)?.title}</span>
+                        </h3>
+                        <span className="chip chip-neutral"><IClock />Needs credentials</span>
+                      </div>
+                      <ConnectorForm companyId={company.id} model={model} planEntry={e} />
+                    </section>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {CATEGORIES.map((cat) => {
             const list = connectors.filter((c) => c.category === cat.id);
             if (!list.length) return null;

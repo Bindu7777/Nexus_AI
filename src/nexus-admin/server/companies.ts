@@ -252,3 +252,12 @@ export function linkPlanEntry(id: number, key: string, connectorId: number) {
   entry.connectorId = connectorId;
   getDb().prepare("UPDATE companies SET tool_plan_json = ? WHERE id = ?").run(JSON.stringify(plan), id);
 }
+
+/** Records a connector added outside the wizard, so the tool list and the connectors agree. */
+export function appendPlanEntry(id: number, entry: { category: string; registryId: string; deployment: "cloud" | "self-hosted"; connectorId: number }) {
+  const plan = getToolPlan(id);
+  if (plan.entries.some((e) => e.connectorId === entry.connectorId)) return;
+  plan.entries.push({ key: Math.random().toString(36).slice(2, 10), label: "", ...entry });
+  plan.none = plan.none.filter((c) => c !== entry.category);
+  getDb().prepare("UPDATE companies SET tool_plan_json = ? WHERE id = ?").run(JSON.stringify(plan), id);
+}
