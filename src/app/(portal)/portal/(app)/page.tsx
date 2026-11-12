@@ -1,42 +1,44 @@
 import { CATEGORIES } from "@/nexus-admin/connectors/types";
+import { getApplication } from "@/nexus-admin/server/application";
 import { listCompanyConnectors } from "@/nexus-admin/server/connectors";
+import { defectExamples, defectSources } from "@/portal/server/defects";
 import { requirePortalPage } from "@/portal/server/page-guard";
+import { PortalHome } from "@/portal/ui/home";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Investigate" };
 
-export default async function PortalHome() {
-  const { user, company } = await requirePortalPage();
-  // Only names and health reach the browser: no config, scope or secrets.
+const isUrl = (s: string) => /^https?:\/\/[^\s]+$/i.test(s.trim());
+
+export default async function PortalHomePage() {
+  const { user, company, session } = await requirePortalPage();
+  // Only names and health reach the browser: no config, scope values or secrets.
   const sources = listCompanyConnectors(company.id)
     .filter((c) => !c.planned)
-    .map((c) => ({ id: c.id, name: c.displayName, category: CATEGORIES.find((x) => x.id === c.category)?.title ?? c.category, ok: c.active && c.status === "healthy", failing: c.status === "failing" }));
-  const first = (user.display_name || "").split(" ")[0];
+    .map((c) => ({
+      id: c.id,
+      name: c.label || c.displayName,
+      category: c.category,
+      categoryTitle: CATEGORIES.find((x) => x.id === c.category)?.title ?? c.category,
+      state: (c.status === "failing" ? "failing" : c.active && c.status === "healthy" ? "healthy" : "untested") as "healthy" | "failing" | "untested",
+    }));
+  const app = getApplication(company.id);
+  const website =
+    (isUrl(app.info.name) ? app.info.name : null) ??
+    app.urls.find((u) => u.environment === "production")?.url ??
+    null;
+  const ds = defectSources(company.id);
   return (
-    <section className="hero" aria-labelledby="home-title">
-      <h1 id="home-title">{first ? `Hello ${first}. ` : ""}What should Nexus investigate?</h1>
-      <p className="lead">Enter a defect number. Nexus reads {company.name}&apos;s connected systems, cites every piece of evidence, and says plainly when it does not have enough.</p>
-      <div className="ask" role="group" aria-label="Start an investigation">
-        <label className="sr-only" htmlFor="defect">Defect number</label>
-        <input id="defect" placeholder="Enter a defect number, for example PAY-1423" disabled aria-describedby="ask-note" />
-        <button type="button" className="btn btn-main" disabled>Start investigation</button>
-      </div>
-      <p id="ask-note" className="faint small" style={{ marginTop: 10 }}>Investigations are being switched on in the next build step.</p>
-
-      <div className="sources" aria-label="Connected sources">
-        <span className="muted small">Sources:</span>
-        {sources.length === 0 ? <span className="muted small">No sources connected yet. Your company admin connects them.</span> : null}
-        {sources.map((s) => (
-          <span key={s.id} className={`source ${s.ok ? "ok" : s.failing ? "bad" : ""}`}>
-            <span className="dot" aria-hidden="true" />
-            {s.name}
-            <span className="state">· {s.ok ? "healthy" : s.failing ? "failing, evidence may be incomplete" : "not tested"}</span>
-          </span>
-        ))}
-      </div>
-
-      <h2 className="section-title">Your recent investigations</h2>
-      <div className="card empty-state">None yet.</div>
-    </section>
+    <PortalHome
+      csrf={session.csrf_token}
+      firstName={(user.display_name || "").split(" ")[0]}
+      company={{ name: company.name, code: company.short_code, liveSince: company.went_live_at, website }}
+      sources={sources}
+      defect={{
+        ready: ds.length > 0,
+        where: ds.map((s) => (s.kind === "jira" ? `Jira (${s.projectKeys.join(", ")})` : `GitHub Issues (${s.repository})`)),
+        examples: defectExamples(ds),
+      }}
+    />
   );
 }
