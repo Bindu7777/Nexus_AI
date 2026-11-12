@@ -12,6 +12,7 @@ import { createMarkdownFolderConnector } from "../connectors/docs/markdown-folde
 import { evidenceItemToRecord } from "../connectors/evidence.ts";
 import { createGitHubConnector } from "../connectors/github.ts";
 import { assertReadOnlyRequest, createReadOnlyHttp } from "../connectors/http.ts";
+import { parseLogLines } from "../connectors/logs/vercel.ts";
 import { buildConnectors } from "../connectors/index.ts";
 import { createFileLogConnector } from "../connectors/logs/file.ts";
 import { createCloudWatchLogsConnector, createDatadogLogsConnector, createLokiLogsConnector, createSentryConnector } from "../connectors/logs/stubs.ts";
@@ -426,4 +427,25 @@ test("connector evidence maps onto an engine evidence record with its citation f
   const body = record.body as { path: string; startLine: number; endLine: number; excerpt: string };
   assert.deepEqual([body.path, body.startLine, body.endLine], ["src/feed.ts", 2, 3]);
   assert.equal(body.excerpt, "line 2\nline 3");
+});
+
+test("capped streaming GET stops at its byte limit and never sends a body", async () => {
+  const seen: RequestInit[] = [];
+  const stream = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(new TextEncoder().encode('{"rowId":"x","message":"line"}\n'));
+    },
+  });
+  const http = createReadOnlyHttp({
+    fetchImpl: async (_url, init) => {
+      seen.push(init ?? {});
+      return new Response(stream);
+    },
+  });
+  const r = await http.getTextCapped("https://api.example.invalid/stream", {}, { maxBytes: 200, maxMs: 2000 });
+  assert.equal(r.truncated, true);
+  assert.ok(r.text.length >= 200 && r.text.length < 400);
+  assert.equal(seen[0].method, "GET");
+  assert.equal(seen[0].body, undefined);
+  assert.ok(parseLogLines(r.text).length >= 5, "complete lines parse, a cut-off last line is skipped");
 });

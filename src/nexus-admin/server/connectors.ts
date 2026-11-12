@@ -291,7 +291,16 @@ function contextOf(row: Row, which: "live" | "pending"): { ctx: ConnectorContext
     siblingSecret,
   };
   const sib = [siblingSecret("github", "token")];
-  return { ctx, secretValues: [...Object.values(secrets), ...sib].filter((s): s is string => Boolean(s)) };
+  // A secret may be a URL with a password inside (a database connection string): scrub that part too.
+  const embedded = Object.values(secrets).flatMap((s) => {
+    try {
+      const u = new URL(s.replace(/^postgresql:/, "postgres:"));
+      return u.password ? [u.password, decodeURIComponent(u.password)] : [];
+    } catch {
+      return [];
+    }
+  });
+  return { ctx, secretValues: [...Object.values(secrets), ...embedded, ...sib].filter((s): s is string => Boolean(s)) };
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

@@ -10,6 +10,15 @@ export type ReadOnlyHttp = {
   get(url: string, headers?: Record<string, string>): Promise<Response>;
   getJson<T>(url: string, headers?: Record<string, string>): Promise<{ status: number; data: T | null; headers: Headers }>;
   getText(url: string, headers?: Record<string, string>): Promise<{ status: number; text: string; headers: Headers }>;
+  /**
+   * GET a streaming response and stop after maxMs or maxBytes, whichever comes
+   * first. For endpoints that keep a log stream open.
+   */
+  getTextCapped(
+    url: string,
+    headers?: Record<string, string>,
+    limits?: { maxMs?: number; maxBytes?: number },
+  ): Promise<{ status: number; text: string; truncated: boolean }>;
 };
 
 export function assertReadOnlyRequest(init: RequestInit | undefined) {
@@ -74,6 +83,44 @@ export function createReadOnlyHttp(options: {
     async getText(url: string, headers?: Record<string, string>) {
       const response = await get(url, headers);
       return { status: response.status, text: await response.text(), headers: response.headers };
+    },
+    async getTextCapped(url: string, headers: Record<string, string> = {}, limits = {}) {
+      const maxMs = limits.maxMs ?? 8000;
+      const maxBytes = limits.maxBytes ?? 2 * 1024 * 1024;
+      const controller = new AbortController();
+      const init: RequestInit = { method: "GET", headers: { ...options.baseHeaders, ...headers }, signal: controller.signal };
+      assertReadOnlyRequest(init);
+      const timer = setTimeout(() => controller.abort(), maxMs);
+      let response: Response;
+      try {
+        response = await fetchImpl(url, init);
+      } catch (error) {
+        clearTimeout(timer);
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(redact(`GET ${url} failed: ${detail}`, secrets));
+      }
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      let truncated = false;
+      try {
+        const reader = response.body?.getReader();
+        while (reader) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          size += value.byteLength;
+          if (size >= maxBytes) {
+            truncated = true;
+            controller.abort();
+            break;
+          }
+        }
+      } catch {
+        truncated = true; // stopped by the time cap
+      } finally {
+        clearTimeout(timer);
+      }
+      return { status: response.status, text: Buffer.concat(chunks).toString("utf8"), truncated };
     },
   };
 }

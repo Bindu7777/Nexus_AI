@@ -71,6 +71,17 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
             <div className="card stat"><span className="muted small">Employees</span><div className="n">{users.filter((u) => u.role === "employee").length}</div></div>
             <div className="card stat"><span className="muted small">Last activity</span><div className="small" style={{ marginTop: 10 }}>{fmtTime(company.last_activity_at)}</div></div>
           </div>
+          <section className="card card-pad spread" aria-label="Quick actions">
+            <div>
+              <h2 style={{ margin: 0 }}>Files and connections</h2>
+              <p className="muted small" style={{ margin: "4px 0 0" }}>Upload KT material and documentation, record the application&apos;s URLs, or connect the database and logs.</p>
+            </div>
+            <span className="row">
+              <Link className="btn btn-primary" href={`${base}?tab=kt`}><IPlus />Upload KT files</Link>
+              <Link className="btn btn-ghost" href={`${base}?tab=application`}>Application and docs</Link>
+              <Link className="btn btn-ghost" href={`/nexus-admin/onboard/${company.id}/tools`}>Connect database or logs</Link>
+            </span>
+          </section>
           <section className="card card-pad">
             <h2>Details</h2>
             <dl className="small" style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: "6px 12px", margin: 0 }}>

@@ -32,8 +32,10 @@ import def_servicenow from "./defs/servicenow";
 import def_sharepoint from "./defs/sharepoint";
 import def_splunk from "./defs/splunk";
 import def_sqlserver from "./defs/sqlserver";
+import def_supabase_db from "./defs/supabase-db";
 import def_supabase_logs from "./defs/supabase-logs";
 import def_testrail from "./defs/testrail";
+import def_vercel_logs from "./defs/vercel-logs";
 import def_visio from "./defs/visio";
 import def_xray from "./defs/xray";
 import def_zephyr from "./defs/zephyr";
@@ -70,8 +72,10 @@ export const DEFINITIONS: ConnectorDefinition[] = [
   def_sharepoint,
   def_splunk,
   def_sqlserver,
+  def_supabase_db,
   def_supabase_logs,
   def_testrail,
+  def_vercel_logs,
   def_visio,
   def_xray,
   def_zephyr,

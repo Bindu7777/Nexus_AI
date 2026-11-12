@@ -50,6 +50,12 @@ function recordingFetch() {
     const proj = p.match(/\/rest\/api\/[23]\/project\/([A-Z0-9_]+)$/);
     if (proj) return json({ key: proj[1], name: `Project ${proj[1]}` });
     if (p.includes("/analytics/endpoints/logs.all")) return json({ result: [{ timestamp: 1 }] });
+    if (p === "/v2/user") return json({ user: { username: "bindu" } });
+    if (/^\/v9\/projects\/[^/]+$/.test(p)) return json({ id: "prj_1", name: "happy-moments", framework: "nextjs" });
+    if (p === "/v6/deployments") return json({ deployments: [{ uid: "dpl_1", url: "happy-moments.vercel.app", readyState: "READY", target: "production" }] });
+    if (p.endsWith("/runtime-logs")) {
+      return new Response('{"rowId":"r1","level":"error","message":"insert into moments failed","timestampInMs":1731400000000,"requestPath":"/api/moments","responseStatusCode":500}\n');
+    }
     if (p === "/" || p === "") return new Response("ok", { status: 200 });
     return json({ message: "Not Found" }, 404);
   };
@@ -73,6 +79,7 @@ function ctxFor(def: ConnectorDefinition, fetchImpl: ConnectorContext["fetchImpl
     } as unknown as ConnectorContext,
     "logs-file": { deployment: "self-hosted", config: {}, scope: { paths: [dirs.logs] }, secrets: {} } as unknown as ConnectorContext,
     "docs-folder": { deployment: "self-hosted", config: {}, scope: { paths: [dirs.docs] }, secrets: {} } as unknown as ConnectorContext,
+    "vercel-logs": { deployment: "cloud", config: { teamId: "team_abcdefgh", deployments: 2 }, scope: { projects: ["happy-moments"] }, secrets: { token: "vercel_contract_token" } } as unknown as ConnectorContext,
   };
   const c = base[def.id];
   if (!c) throw new Error(`No contract context for ${def.id}`);
@@ -327,4 +334,31 @@ test("a planned connector can be recorded but never becomes active", async () =>
   assert.match(tested.result.problems[0], /coming soon/);
   assert.equal(tested.connector.active, false);
   assert.equal(tested.connector.status, "never_tested");
+});
+
+test("Vercel logs: search reads runtime logs over GET and cites the deployment", async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const def = registry().get("vercel-logs")!;
+  const dirs = tempDirs();
+  const c = def.build!(ctxFor(def, fetchImpl, dirs));
+  const found = await c.search({ text: "moments failed" });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].ref, "log:vercel:happy-moments:dpl_1:r1");
+  assert.equal(found[0].timestamp, new Date(1731400000000).toISOString());
+  assert.match(found[0].title, /error GET? ?\/api\/moments → 500|error +\/api\/moments → 500/);
+  assert.ok(calls.every((x) => x.method === "GET" && !x.hasBody));
+  assert.ok(calls.some((x) => x.url.includes("teamId=team_abcdefgh")), "team id is passed");
+});
+
+test("Supabase database: the connection string is checked before connecting", async () => {
+  const def = registry().get("supabase-db")!;
+  const base = { deployment: "cloud" as const, config: {}, scope: { schemas: ["public"] }, fetchImpl: fetch, siblingSecret: () => undefined };
+  const run = (cs: string) => def.test!({ ...base, secrets: { connectionString: cs } });
+  assert.match((await run("postgresql://postgres.abc:[YOUR-PASSWORD]@aws-0-ap-south-1.pooler.supabase.com:5432/postgres")).problems[0], /Replace \[YOUR-PASSWORD\]/);
+  assert.match((await run("mysql://u:p@h/db")).problems[0], /must start with postgresql/);
+  assert.match((await run("not a url")).problems[0], /not a Postgres connection string/);
+  assert.deepEqual(def.targets!({ ...base, secrets: { connectionString: "postgresql://nexus_readonly.abc:pw@aws-0-ap-south-1.pooler.supabase.com:5432/postgres" } }), [
+    { host: "aws-0-ap-south-1.pooler.supabase.com" },
+  ]);
+  assert.ok(def.setupHelp!({}).includes("nexus_readonly.<project-ref>"));
 });
