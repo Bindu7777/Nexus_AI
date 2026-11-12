@@ -10,7 +10,7 @@ export default async function NewCompanyPage() {
       <div className="page-head">
         <div>
           <h1>Onboard a company</h1>
-          <p>Step 1 of 7. A draft is saved after every step, so you can stop and come back.</p>
+          <p>Step 1 of 8. A draft is saved after every step, so you can stop and come back.</p>
         </div>
       </div>
       <section className="card card-pad">

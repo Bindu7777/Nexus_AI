@@ -2,6 +2,7 @@
 // admin can stop and resume.
 export const ONBOARDING_STEPS = [
   { id: "company", title: "Company" },
+  { id: "application", title: "Application" },
   { id: "tools", title: "Pick tools" },
   { id: "credentials", title: "Credentials and scope" },
   { id: "test", title: "Test connections" },

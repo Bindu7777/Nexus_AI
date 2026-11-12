@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { formModel } from "@/nexus-admin/connectors/form";
 import { registry } from "@/nexus-admin/connectors/registry";
 import { CATEGORIES } from "@/nexus-admin/connectors/types";
+import { getApplication } from "@/nexus-admin/server/application";
 import { queryAudit } from "@/nexus-admin/server/audit";
 import { canCreateLogins, displayStatus, getCompany, goLiveBlockers } from "@/nexus-admin/server/companies";
 import { listCompanyConnectors } from "@/nexus-admin/server/connectors";
 import { requireAdminPage } from "@/nexus-admin/server/page-guard";
 import { listUsers } from "@/nexus-admin/server/users";
+import { ApplicationPanel } from "@/nexus-admin/ui/application";
 import { CompanyStatusChip, fmtTime, ResultChip } from "@/nexus-admin/ui/chips";
 import { GoLiveButton, PauseResume, UsersPanel } from "@/nexus-admin/ui/company";
 import { ConnectorCard, HealthDots, TestAllButton } from "@/nexus-admin/ui/connectors";
@@ -17,6 +19,7 @@ export const dynamic = "force-dynamic";
 
 const TABS = [
   { id: "overview", title: "Overview" },
+  { id: "application", title: "Application" },
   { id: "health", title: "Connection health" },
   { id: "logins", title: "Logins" },
   { id: "usage", title: "Usage" },
@@ -83,6 +86,8 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
           ) : null}
         </div>
       ) : null}
+
+      {tab === "application" ? <ApplicationPanel companyId={company.id} app={getApplication(company.id)} /> : null}
 
       {tab === "health" ? (
         <div className="stack">

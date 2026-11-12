@@ -41,7 +41,7 @@ export function DetailsForm({ companyId, initial, nextHref }: { companyId?: numb
       return;
     }
     const id = companyId ?? (r as { id: number }).id;
-    router.push(nextHref ?? `/nexus-admin/onboard/${id}/tools`);
+    router.push(nextHref ?? `/nexus-admin/onboard/${id}/application`);
     router.refresh();
   }
 

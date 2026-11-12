@@ -5,9 +5,11 @@ import { registry } from "@/nexus-admin/connectors/registry";
 import { CATEGORIES } from "@/nexus-admin/connectors/types";
 import { isStep, ONBOARDING_STEPS, type StepId } from "@/nexus-admin/onboarding";
 import { canCreateLogins, displayStatus, getCompany, getToolPlan, goLiveBlockers } from "@/nexus-admin/server/companies";
+import { getApplication } from "@/nexus-admin/server/application";
 import { listCompanyConnectors } from "@/nexus-admin/server/connectors";
 import { requireAdminPage } from "@/nexus-admin/server/page-guard";
 import { listUsers } from "@/nexus-admin/server/users";
+import { ApplicationPanel } from "@/nexus-admin/ui/application";
 import { CompanyStatusChip } from "@/nexus-admin/ui/chips";
 import { GoLiveButton, UsersPanel } from "@/nexus-admin/ui/company";
 import { ConnectorCard, ConnectorForm, HealthChip, TestAllButton, ToolPicker } from "@/nexus-admin/ui/connectors";
@@ -29,11 +31,13 @@ export default async function OnboardingStep({ params }: { params: Promise<{ id:
   const modelOf = (id: string) => models.find((m) => m.id === id);
   const byId = new Map(connectors.map((c) => [c.id, c]));
   const blockers = goLiveBlockers(company.id);
+  const app = getApplication(company.id);
 
   const codeReady = connectors.some((c) => c.category === "code" && c.active && c.status !== "failing");
   const docsReady = connectors.some((c) => c.category === "docs" && c.active && c.status !== "failing");
   const done: Record<StepId, boolean> = {
     company: true,
+    application: Boolean(app.info.name) && (app.urls.length > 0 || app.docs.length > 0),
     tools: plan.entries.length > 0,
     credentials: plan.entries.length > 0 && plan.entries.every((e) => e.connectorId && byId.has(e.connectorId)),
     test: connectors.length > 0 && connectors.filter((c) => !c.planned).every((c) => c.active && c.status === "healthy"),
@@ -80,6 +84,16 @@ export default async function OnboardingStep({ params }: { params: Promise<{ id:
             <section className="card card-pad">
               <DetailsForm companyId={company.id} initial={company} nextHref={nextHref} />
             </section>
+          ) : null}
+
+          {step === "application" ? (
+            <div className="stack">
+              <p className="muted" style={{ margin: 0 }}>
+                Describe the application, where it runs, and its documentation. You can add more later from the company page.
+              </p>
+              <ApplicationPanel companyId={company.id} app={app} />
+              <NextStep href={nextHref} label="Continue to tools" />
+            </div>
           ) : null}
 
           {step === "tools" ? (

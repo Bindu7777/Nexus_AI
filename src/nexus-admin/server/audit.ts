@@ -69,6 +69,7 @@ export const ACTION_GROUPS: Record<string, string> = {
   "auth.": "Sign-ins",
   "company.": "Companies",
   "connector.": "Connectors",
+  "application.": "Application",
   "onboarding.": "Onboarding",
   "user.": "Company logins",
   "settings.": "Settings",

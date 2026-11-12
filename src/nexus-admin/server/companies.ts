@@ -75,7 +75,7 @@ export function createCompany(details: CompanyDetails, actor: Actor, ip: string)
   const info = getDb()
     .prepare(
       `INSERT INTO companies (name, short_code, contact_name, contact_email, country, region, deployment_mode, notes, status, onboarding_step, created_at, updated_at, last_activity_at)
-       VALUES (@name, @short_code, @contact_name, @contact_email, @country, @region, @deployment_mode, @notes, 'draft', 'tools', @now, @now, @now)`,
+       VALUES (@name, @short_code, @contact_name, @contact_email, @country, @region, @deployment_mode, @notes, 'draft', 'application', @now, @now, @now)`,
     )
     .run({ ...details, now });
   const id = Number(info.lastInsertRowid);

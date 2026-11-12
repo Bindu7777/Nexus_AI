@@ -196,6 +196,46 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       ALTER TABLE companies ADD COLUMN tool_plan_json TEXT NOT NULL DEFAULT '{"entries":[],"other":[],"none":[]}';
     `,
   },
+  {
+    version: 4,
+    name: "application profile: urls and documentation",
+    sql: `
+      -- What the customer's application is, entered by the Nexus admin.
+      CREATE TABLE company_applications (
+        company_id INTEGER PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
+        name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL
+      );
+      -- Where the application runs. Reference only: Nexus never sends traffic to these.
+      CREATE TABLE company_app_urls (
+        id INTEGER PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        label TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL,
+        environment TEXT NOT NULL CHECK (environment IN ('production','staging','development','other')),
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      -- Project documentation: links, or files uploaded to the Nexus server.
+      CREATE TABLE company_docs (
+        id INTEGER PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('link','file')),
+        title TEXT NOT NULL,
+        url TEXT,
+        file_name TEXT,
+        stored_name TEXT,
+        mime TEXT,
+        size_bytes INTEGER,
+        sha256 TEXT,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        created_by TEXT NOT NULL
+      );
+      CREATE INDEX company_docs_company ON company_docs (company_id, created_at);
+    `,
+  },
 ];
 
 export function dbPath() {
