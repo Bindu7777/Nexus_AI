@@ -9,6 +9,7 @@
 import readline from "node:readline";
 import { adminCount, createAdmin, resetAdminPassword } from "../src/nexus-admin/server/auth";
 import { currentKeyVersion, decryptSecret, encryptSecret, generateKey } from "../src/nexus-admin/server/crypto";
+import { reencryptConnectorSecrets } from "../src/nexus-admin/server/connectors";
 import { dbPath, getDb } from "../src/nexus-admin/server/db";
 import { passwordProblems } from "../src/nexus-admin/server/passwords";
 
@@ -65,28 +66,17 @@ async function main() {
   }
   if (command === "rotate") {
     const db = getDb();
-    const rows = db.prepare("SELECT id, company_id, kind, secret_enc FROM company_connections WHERE secret_enc IS NOT NULL").all() as {
-      id: number;
-      company_id: number;
-      kind: string;
-      secret_enc: string;
-    }[];
     const now = currentKeyVersion();
     let rotated = 0;
     db.transaction(() => {
-      for (const r of rows) {
-        const aad = `company:${r.company_id}:connection:${r.kind}`;
-        const enc = encryptSecret(decryptSecret(r.secret_enc, aad), aad);
-        db.prepare("UPDATE company_connections SET secret_enc = ?, key_version = ? WHERE id = ?").run(enc.blob, enc.keyVersion, r.id);
-        rotated += 1;
-      }
+      rotated = reencryptConnectorSecrets();
       const admins = db.prepare("SELECT id, totp_secret_enc FROM nexus_admins WHERE totp_secret_enc IS NOT NULL").all() as { id: number; totp_secret_enc: string }[];
       for (const a of admins) {
         const aad = `admin:${a.id}:totp`;
         db.prepare("UPDATE nexus_admins SET totp_secret_enc = ? WHERE id = ?").run(encryptSecret(decryptSecret(a.totp_secret_enc, aad), aad).blob, a.id);
       }
     })();
-    console.log(`Re-encrypted ${rotated} connection secret(s) with key ${now}. You can now remove NEXUS_SECRETS_KEY_PREVIOUS.`);
+    console.log(`Re-encrypted secrets for ${rotated} connector(s) with key ${now}. You can now remove NEXUS_SECRETS_KEY_PREVIOUS.`);
     return;
   }
   if (command === "create" || command === "reset") {

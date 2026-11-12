@@ -114,6 +114,80 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
         BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
     `,
   },
+  {
+    version: 2,
+    name: "connector registry, pending changes, check history",
+    sql: `
+      -- Many connectors per company, one row each, driven by the connector registry.
+      CREATE TABLE company_connectors (
+        id INTEGER PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        registry_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        deployment TEXT NOT NULL CHECK (deployment IN ('cloud','self-hosted')),
+        config_json TEXT NOT NULL DEFAULT '{}',
+        scope_json TEXT NOT NULL DEFAULT '{}',
+        secrets_enc TEXT,
+        secrets_saved_at TEXT,
+        key_version TEXT,
+        -- A change to an active connector waits here until it passes a test.
+        pending_deployment TEXT,
+        pending_config_json TEXT,
+        pending_scope_json TEXT,
+        pending_secrets_enc TEXT,
+        pending_since TEXT,
+        status TEXT NOT NULL DEFAULT 'never_tested' CHECK (status IN ('never_tested','healthy','failing')),
+        activated_at TEXT,
+        last_tested_at TEXT,
+        last_ok_at TEXT,
+        last_error TEXT,
+        last_result_json TEXT,
+        needs_secret INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX company_connectors_company ON company_connectors (company_id, category);
+
+      CREATE TABLE connector_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        connector_id INTEGER NOT NULL REFERENCES company_connectors(id) ON DELETE CASCADE,
+        company_id INTEGER NOT NULL,
+        at TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        target TEXT NOT NULL CHECK (target IN ('live','pending')),
+        ok INTEGER NOT NULL,
+        status_before TEXT,
+        status_after TEXT,
+        duration_ms INTEGER,
+        result_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX connector_checks_connector ON connector_checks (connector_id, at);
+
+      ALTER TABLE companies ADD COLUMN region TEXT NOT NULL DEFAULT '';
+      ALTER TABLE companies ADD COLUMN deployment_mode TEXT NOT NULL DEFAULT 'customer';
+      ALTER TABLE companies ADD COLUMN went_live_at TEXT;
+
+      -- Carry over connections saved by the earlier one-per-category screen.
+      -- Their secrets were bound to the old row format, so each is marked
+      -- needs_secret and must be re-entered and re-tested.
+      INSERT INTO company_connectors (company_id, registry_id, category, label, deployment, config_json, scope_json, status, needs_secret, created_at, updated_at)
+      SELECT company_id,
+             CASE provider
+               WHEN 'jira-cloud' THEN 'jira' WHEN 'jira-dc' THEN 'jira'
+               WHEN 'supabase' THEN 'postgres'
+               WHEN 'log-files' THEN 'logs-file'
+               WHEN 'http-service' THEN 'service-under-test'
+               WHEN 'confluence-cloud' THEN 'confluence' WHEN 'confluence-dc' THEN 'confluence'
+               WHEN 'other-logs' THEN 'logs-http'
+               ELSE provider END,
+             CASE kind WHEN 'tickets' THEN 'defects' WHEN 'service' THEN 'services' ELSE kind END,
+             '',
+             CASE WHEN provider IN ('jira-dc','confluence-dc','log-files','docs-folder','http-service') THEN 'self-hosted' ELSE 'cloud' END,
+             config_json, '{}', 'never_tested', CASE WHEN secret_enc IS NULL THEN 0 ELSE 1 END, created_at, updated_at
+      FROM company_connections;
+    `,
+  },
 ];
 
 export function dbPath() {
@@ -148,15 +222,23 @@ export function openDb(file = dbPath()): Db {
   return db;
 }
 
-type G = typeof globalThis & { __nexusAdminDb?: { file: string; db: Db } };
+type G = typeof globalThis & { __nexusAdminDb?: { file: string; db: Db; migratedTo: number } };
 
-/** Process-wide connection. Tests can point NEXUS_ADMIN_DB at a temp file and call resetDbForTests(). */
+const LATEST = Math.max(...MIGRATIONS.map((m) => m.version));
+
+/**
+ * Process-wide connection. Tests can point NEXUS_ADMIN_DB at a temp file and call resetDbForTests().
+ * The connection survives dev-server reloads, so newer migrations are applied to it when the code changes.
+ */
 export function getDb(): Db {
   const g = globalThis as G;
   const file = dbPath();
   if (!g.__nexusAdminDb || g.__nexusAdminDb.file !== file) {
     g.__nexusAdminDb?.db.close();
-    g.__nexusAdminDb = { file, db: openDb(file) };
+    g.__nexusAdminDb = { file, db: openDb(file), migratedTo: LATEST };
+  } else if (g.__nexusAdminDb.migratedTo < LATEST) {
+    migrate(g.__nexusAdminDb.db);
+    g.__nexusAdminDb.migratedTo = LATEST;
   }
   return g.__nexusAdminDb.db;
 }

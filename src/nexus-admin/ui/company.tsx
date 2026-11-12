@@ -2,12 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { TestOutcome } from "../server/connections";
 import type { PublicUser } from "../server/users";
 import { adminFetch, useAdmin } from "./client";
 import { fmtTime } from "./chips";
 import { ICheck, ICopy, IPause, IRefresh, IX } from "./icons";
-import { TestResult } from "./onboarding";
 
 export function PauseResume({ companyId, paused }: { companyId: number; paused: boolean }) {
   const { csrf } = useAdmin();
@@ -43,91 +41,6 @@ export function PauseResume({ companyId, paused }: { companyId: number; paused: 
       <IPause />
       Pause company
     </button>
-  );
-}
-
-export function Retest({ companyId, kind }: { companyId: number; kind: string }) {
-  const { csrf } = useAdmin();
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<TestOutcome | null>(null);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  return (
-    <div className="stack" style={{ gap: 10 }}>
-      <div className="row">
-        <a className="btn btn-ghost btn-sm" href={`/nexus-admin/onboard/${companyId}/${kind === "service" ? "logs" : kind}`}>
-          Edit
-        </a>
-        <button
-          type="button"
-          className="btn btn-blue btn-sm"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            const r = await adminFetch<{ outcome: TestOutcome }>(csrf, `/api/nexus-admin/companies/${companyId}/connections/${kind}`, "POST", {});
-            setBusy(false);
-            if (r.ok) setOutcome(r.outcome);
-            router.refresh();
-          }}
-        >
-          {busy ? <span className="spin" aria-hidden="true" /> : <IRefresh />}
-          Retest
-        </button>
-        {confirmRemove ? (
-          <>
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={async () => {
-                await adminFetch(csrf, `/api/nexus-admin/companies/${companyId}/connections/${kind}`, "DELETE");
-                router.refresh();
-              }}
-            >
-              Confirm remove
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRemove(false)}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <button type="button" className="btn btn-danger btn-sm" onClick={() => setConfirmRemove(true)}>
-            Remove
-          </button>
-        )}
-      </div>
-      {outcome ? <TestResult outcome={outcome} /> : null}
-    </div>
-  );
-}
-
-function Reveal({ loginId, password, onDone }: { loginId: string; password: string; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="reveal" role="status">
-      <strong>Temporary password for {loginId}</strong>
-      <span className="small">Shown once. Copy it now and share it securely. They must choose a new password at first sign-in.</span>
-      <div className="row">
-        <code aria-label="Temporary password">{password}</code>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(password);
-              setCopied(true);
-            } catch {
-              setCopied(false);
-            }
-          }}
-        >
-          {copied ? <ICheck /> : <ICopy />}
-          {copied ? "Copied" : "Copy"}
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
-          I have saved it
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -300,6 +213,37 @@ export function UsersPanel({ companyId, companyCode, users, canCreate, paused }:
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Reveal({ loginId, password, onDone }: { loginId: string; password: string; onDone: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="reveal" role="status">
+      <strong>Temporary password for {loginId}</strong>
+      <span className="small">Shown once. Copy it now and share it securely. They must choose a new password at first sign-in.</span>
+      <div className="row">
+        <code aria-label="Temporary password">{password}</code>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(password);
+              setCopied(true);
+            } catch {
+              setCopied(false);
+            }
+          }}
+        >
+          {copied ? <ICheck /> : <ICopy />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
+          I have saved it
+        </button>
       </div>
     </div>
   );

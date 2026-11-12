@@ -2,7 +2,8 @@ import Link from "next/link";
 import { queryAudit } from "@/nexus-admin/server/audit";
 import { companiesNeedingAttention, statusCounts } from "@/nexus-admin/server/companies";
 import { requireAdminPage } from "@/nexus-admin/server/page-guard";
-import { KINDS } from "@/nexus-admin/providers";
+import { registry } from "@/nexus-admin/connectors/registry";
+import { CATEGORIES } from "@/nexus-admin/connectors/types";
 import { CompanyStatusChip, fmtTime, ResultChip } from "@/nexus-admin/ui/chips";
 import { IPlus } from "@/nexus-admin/ui/icons";
 
@@ -69,14 +70,14 @@ export default async function Dashboard() {
                     </thead>
                     <tbody>
                       {attention.map((a) => (
-                        <tr key={`${a.id}-${a.kind}`}>
+                        <tr key={`${a.id}-${a.connector_id}`}>
                           <td>
-                            <Link className="row-link" href={`/nexus-admin/companies/${a.id}?tab=connections`}>
+                            <Link className="row-link" href={`/nexus-admin/companies/${a.id}?tab=health`}>
                               {a.name}
                             </Link>
                           </td>
-                          <td>{KINDS.find((k) => k.kind === a.kind)?.title ?? a.kind}</td>
-                          <td className="muted">{fmtTime(a.last_test_at)}</td>
+                          <td>{registry().get(a.registry_id)?.displayName ?? a.registry_id} <span className="muted">· {CATEGORIES.find((c) => c.id === a.category)?.title ?? a.category}</span></td>
+                          <td className="muted">{fmtTime(a.last_tested_at)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -42,7 +42,7 @@ export async function createUser(input: { companyId: number; role: CompanyUserRo
   const company = getCompany(input.companyId);
   if (!company) throw new Error("Company not found.");
   if (company.status === "paused") throw new Error("This company is paused. Resume it before creating logins.");
-  if (!canCreateLogins(input.companyId)) throw new Error("Test the code host and the ticket tool successfully before creating logins.");
+  if (!canCreateLogins(input.companyId)) throw new Error("A code connector and a defects connector must pass their tests before logins are created.");
   const problem = validateLoginId(input.role, input.loginId);
   if (problem) throw new Error(problem);
   const loginId = input.role === "company_admin" ? input.loginId.trim().toLowerCase() : input.loginId.trim();
