@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { runtimePassword, useTempAdminEnv } from "./helpers.ts";
+import { runtimePassword, setupTempAdminEnv } from "./helpers.ts";
 
 import { adminCount, createAdmin, findAdmin, LOCK_AFTER, NEUTRAL_FAIL, requireAdminApi, resetRateLimitsForTests, signIn } from "../../src/nexus-admin/server/auth.ts";
 import { decryptSecret, encryptSecret } from "../../src/nexus-admin/server/crypto.ts";
@@ -11,7 +11,7 @@ import { redactText, redactValue } from "../../src/nexus-admin/server/redact.ts"
 import { base32Encode, totpCode, verifyTotp } from "../../src/nexus-admin/server/totp.ts";
 
 // Settings are read lazily, so this runs before any database or key is used.
-const env = useTempAdminEnv("auth");
+const env = setupTempAdminEnv("auth");
 
 const OWNER = "Hima Bindu";
 const ownerPassword = runtimePassword();

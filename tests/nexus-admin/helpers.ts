@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 
 /** Fresh temp database and a fresh secrets key for each test file. */
-export function useTempAdminEnv(name: string) {
+export function setupTempAdminEnv(name: string) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `nexus-admin-${name}-`));
   process.env.NEXUS_ADMIN_DB = path.join(dir, "admin.sqlite");
   process.env.NEXUS_SECRETS_KEY = randomBytes(32).toString("base64");
