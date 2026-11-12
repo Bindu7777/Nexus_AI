@@ -109,7 +109,7 @@ export function UsersPanel({ companyId, companyCode, users, canCreate, paused }:
 
       {!canCreate || paused ? (
         <p className="callout warn">
-          {paused ? "This company is paused, so its logins are blocked. Resume it to create logins." : "Test the code host and the ticket tool successfully before creating logins."}
+          {paused ? "This company is paused, so its logins are blocked. Resume it to create logins." : "A code connector and a defects connector must pass their tests before logins are created."}
         </p>
       ) : (
         <div className="grid-2">
@@ -244,6 +244,42 @@ function Reveal({ loginId, password, onDone }: { loginId: string; password: stri
         <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
           I have saved it
         </button>
+      </div>
+    </div>
+  );
+}
+
+export function GoLiveButton({ companyId, blockers }: { companyId: number; blockers: string[] }) {
+  const { csrf } = useAdmin();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function run() {
+    setBusy(true);
+    const r = await adminFetch(csrf, `/api/nexus-admin/companies/${companyId}`, "POST", { action: "go-live" });
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    router.push(`/nexus-admin/companies/${companyId}`);
+    router.refresh();
+  }
+  return (
+    <div className="stack">
+      {blockers.length ? (
+        <div className="callout warn">
+          <IX />
+          <div>
+            <strong>Not ready to go live yet</strong>
+            <ul className="small">{blockers.map((b) => <li key={b}>{b}</li>)}</ul>
+          </div>
+        </div>
+      ) : null}
+      {error ? <p className="callout bad" role="alert"><IX />{error}</p> : null}
+      <div className="row">
+        <button type="button" className="btn btn-primary" disabled={busy || blockers.length > 0} onClick={run}>
+          {busy ? <span className="spin" aria-hidden="true" /> : <ICheck />}
+          Go live
+        </button>
+        <span className="muted small">Changes the company from Draft to Active.</span>
       </div>
     </div>
   );

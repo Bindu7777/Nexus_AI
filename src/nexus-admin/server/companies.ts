@@ -194,3 +194,61 @@ export function companiesNeedingAttention() {
     )
     .all() as { id: number; name: string; short_code: string; connector_id: number; category: string; registry_id: string; last_tested_at: string | null; last_error: string | null }[];
 }
+
+// ---------- onboarding tool plan ----------
+
+export type ToolPlanEntry = { key: string; category: string; registryId: string; deployment: "cloud" | "self-hosted"; label: string; connectorId?: number };
+export type ToolPlan = { entries: ToolPlanEntry[]; other: { category: string; text: string }[]; none: string[] };
+
+export function getToolPlan(id: number): ToolPlan {
+  const row = getDb().prepare("SELECT tool_plan_json FROM companies WHERE id = ?").get(id) as { tool_plan_json: string } | undefined;
+  const plan = row ? (JSON.parse(row.tool_plan_json) as Partial<ToolPlan>) : {};
+  return { entries: plan.entries ?? [], other: plan.other ?? [], none: plan.none ?? [] };
+}
+
+/** Validates and saves the tools chosen for a company. Unknown connector ids are refused. */
+export function saveToolPlan(
+  id: number,
+  raw: unknown,
+  known: (registryId: string) => { category: string; deployments: string[] } | undefined,
+  actor: Actor,
+  ip: string,
+) {
+  const input = (raw && typeof raw === "object" ? raw : {}) as Partial<ToolPlan>;
+  const previous = getToolPlan(id);
+  const entries: ToolPlanEntry[] = [];
+  for (const e of (Array.isArray(input.entries) ? input.entries : []).slice(0, 40)) {
+    const def = known(String(e?.registryId ?? ""));
+    if (!def) throw new Error(`Unknown tool "${String(e?.registryId ?? "")}".`);
+    const deployment = e.deployment === "self-hosted" ? "self-hosted" : "cloud";
+    if (!def.deployments.includes(deployment)) throw new Error(`${e.registryId} does not support ${deployment}.`);
+    const key = /^[a-z0-9-]{4,40}$/.test(String(e.key)) ? String(e.key) : Math.random().toString(36).slice(2, 10);
+    const kept = previous.entries.find((p) => p.key === key);
+    entries.push({
+      key,
+      category: def.category,
+      registryId: String(e.registryId),
+      deployment,
+      label: String(e.label ?? "").trim().slice(0, 80),
+      connectorId: kept?.connectorId,
+    });
+  }
+  const other = (Array.isArray(input.other) ? input.other : [])
+    .map((o) => ({ category: String(o?.category ?? "").slice(0, 20), text: String(o?.text ?? "").trim().slice(0, 200) }))
+    .filter((o) => o.text)
+    .slice(0, 20);
+  const none = (Array.isArray(input.none) ? input.none : []).map(String).slice(0, 10);
+  const plan: ToolPlan = { entries, other, none };
+  getDb().prepare("UPDATE companies SET tool_plan_json = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(plan), nowIso(), id);
+  audit({ actor, action: "onboarding.tools_chosen", result: "info", companyId: id, target: entries.map((e) => e.registryId).join(", "), ip, detail: { other, none } });
+  return plan;
+}
+
+/** Links a saved connector to its plan entry so the wizard knows credentials were entered. */
+export function linkPlanEntry(id: number, key: string, connectorId: number) {
+  const plan = getToolPlan(id);
+  const entry = plan.entries.find((e) => e.key === key);
+  if (!entry) return;
+  entry.connectorId = connectorId;
+  getDb().prepare("UPDATE companies SET tool_plan_json = ? WHERE id = ?").run(JSON.stringify(plan), id);
+}

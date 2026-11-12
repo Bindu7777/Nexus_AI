@@ -38,7 +38,7 @@ export default defineConnector({
       placeholder: "acme/web",
       validate: (v) => (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(v)) ? null : "Use owner/name, for example acme/web."),
     },
-    { name: "labels", label: "Only issues with these labels (optional)", type: "list", placeholder: "bug" },
+    { name: "labels", label: "Only issues with these labels", type: "list", placeholder: "bug" },
   ],
   capabilities: { readOnly: true, reads: ["issues", "issue comments"], transport: "http" },
   targets: (ctx) => [{ url: githubApiBase(ctx) }],

@@ -1,7 +1,8 @@
 import { isStep } from "@/nexus-admin/onboarding";
 import { adminRoute, bad, body, idParam, ok } from "@/nexus-admin/server/api";
 import { audit } from "@/nexus-admin/server/audit";
-import { getCompany, goLive, goLiveBlockers, pauseCompany, resumeCompany, setOnboardingStep, updateCompany, validateDetails } from "@/nexus-admin/server/companies";
+import { registry } from "@/nexus-admin/connectors/registry";
+import { getCompany, goLive, goLiveBlockers, pauseCompany, resumeCompany, saveToolPlan, setOnboardingStep, updateCompany, validateDetails } from "@/nexus-admin/server/companies";
 import { listCompanyConnectors } from "@/nexus-admin/server/connectors";
 import { listUsers } from "@/nexus-admin/server/users";
 
@@ -24,8 +25,13 @@ export async function PATCH(request: Request, { params }: Ctx) {
   return adminRoute(request, async (ctx, req) => {
     const companyId = idParam(id);
     const b = await body(req);
+    if (b.toolPlan !== undefined) {
+      const plan = saveToolPlan(companyId, b.toolPlan, (rid) => registry().get(rid), ctx.actor, ctx.ip);
+      return ok({ toolPlan: plan });
+    }
     if (typeof b.step === "string") {
       if (!isStep(b.step)) return bad("Unknown step.");
+      if (getCompany(companyId)?.onboarding_step === b.step) return ok();
       setOnboardingStep(companyId, b.step);
       audit({ actor: ctx.actor, action: "onboarding.step_saved", result: "info", companyId, target: b.step, ip: ctx.ip });
       return ok();

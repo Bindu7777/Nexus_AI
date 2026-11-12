@@ -6,12 +6,12 @@ import { adminFetch, useAdmin } from "./client";
 import { IArrow, IX } from "./icons";
 
 // ---------- company details ----------
-type Details = { name: string; short_code: string; contact_name: string; contact_email: string; country: string; notes: string };
+type Details = { name: string; short_code: string; contact_name: string; contact_email: string; country: string; region: string; deployment_mode: string; notes: string };
 
 export function DetailsForm({ companyId, initial, nextHref }: { companyId?: number; initial?: Partial<Details>; nextHref?: string }) {
   const { csrf } = useAdmin();
   const router = useRouter();
-  const [v, setV] = useState<Details>({ name: "", short_code: "", contact_name: "", contact_email: "", country: "", notes: "", ...initial });
+  const [v, setV] = useState<Details>({ name: "", short_code: "", contact_name: "", contact_email: "", country: "", region: "", deployment_mode: "customer", notes: "", ...initial });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,7 @@ export function DetailsForm({ companyId, initial, nextHref }: { companyId?: numb
       return;
     }
     const id = companyId ?? (r as { id: number }).id;
-    router.push(nextHref ?? `/nexus-admin/onboard/${id}/code`);
+    router.push(nextHref ?? `/nexus-admin/onboard/${id}/tools`);
     router.refresh();
   }
 
@@ -65,6 +65,20 @@ export function DetailsForm({ companyId, initial, nextHref }: { companyId?: numb
         {f("contact_name", "Primary contact name")}
         {f("contact_email", "Primary contact email", "email")}
         {f("country", "Country")}
+        {f("region", "Region or city")}
+        <div className="field full">
+          <span className="label">Deployment mode</span>
+          <div className="provider-pick" role="radiogroup" aria-label="Deployment mode">
+            <label>
+              <input type="radio" name="deployment_mode" checked={v.deployment_mode !== "nexus-hosted"} onChange={() => setV({ ...v, deployment_mode: "customer" })} />
+              Nexus runs on their servers
+            </label>
+            <label>
+              <input type="radio" name="deployment_mode" checked={v.deployment_mode === "nexus-hosted"} onChange={() => setV({ ...v, deployment_mode: "nexus-hosted" })} />
+              Nexus runs on ours, for a pilot
+            </label>
+          </div>
+        </div>
         {f("notes", "Notes", "text", true)}
       </div>
       {msg ? <p className="callout bad" role="alert"><IX />{msg}</p> : null}

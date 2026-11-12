@@ -5,7 +5,7 @@ export function CompanyStatusChip({ status }: { status: string }) {
     case "active":
       return <span className="chip chip-ok"><ICheck />Active</span>;
     case "connected":
-      return <span className="chip chip-info"><ICheck />Connected</span>;
+      return <span className="chip chip-info"><ICheck />Ready to go live</span>;
     case "paused":
       return <span className="chip chip-warn"><IPause />Paused</span>;
     default:

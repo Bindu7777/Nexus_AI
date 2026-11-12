@@ -68,7 +68,7 @@ export type AuditFilter = {
 export const ACTION_GROUPS: Record<string, string> = {
   "auth.": "Sign-ins",
   "company.": "Companies",
-  "connection.": "Connections",
+  "connector.": "Connectors",
   "onboarding.": "Onboarding",
   "user.": "Company logins",
   "settings.": "Settings",

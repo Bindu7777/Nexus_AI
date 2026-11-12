@@ -188,6 +188,14 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       FROM company_connections;
     `,
   },
+  {
+    version: 3,
+    name: "onboarding tool plan",
+    sql: `
+      -- The tools chosen in the wizard's "Pick tools" step, before credentials exist.
+      ALTER TABLE companies ADD COLUMN tool_plan_json TEXT NOT NULL DEFAULT '{"entries":[],"other":[],"none":[]}';
+    `,
+  },
 ];
 
 export function dbPath() {
