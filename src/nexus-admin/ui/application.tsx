@@ -10,7 +10,7 @@ import { IAlert, ICheck, IDownload, IPlus, IX } from "./icons";
 type App = { info: AppInfo; urls: AppUrl[]; docs: AppDoc[] };
 
 const ENV_LABEL: Record<string, string> = { production: "Production", staging: "Staging", development: "Development", other: "Other" };
-const ACCEPT = ".md,.markdown,.txt,.pdf,.docx,.png,.jpg,.jpeg";
+const ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.md,.markdown,.txt,.csv,.png,.jpg,.jpeg,.mp4";
 
 function Msg({ m }: { m: { ok: boolean; text: string } | null }) {
   if (!m) return null;
@@ -29,8 +29,28 @@ export function ApplicationPanel({ companyId, app }: { companyId: number; app: A
     <div className="stack">
       <DetailsCard companyId={companyId} info={app.info} />
       <UrlsCard companyId={companyId} urls={app.urls} />
-      <DocsCard companyId={companyId} docs={app.docs} />
+      <DocsCard
+        companyId={companyId}
+        docs={app.docs}
+        section="docs"
+        heading="Project documentation"
+        blurb="Links to existing documents, or files uploaded to the Nexus server. Stored only on this server."
+      />
+      <KtCard companyId={companyId} docs={app.docs} />
     </div>
+  );
+}
+
+/** Knowledge-transfer material: handover decks, recordings, runbooks, spreadsheets. */
+export function KtCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
+  return (
+    <DocsCard
+      companyId={companyId}
+      docs={docs}
+      section="kt"
+      heading="KT files"
+      blurb="Knowledge-transfer material: handover documents, slide decks, spreadsheets, runbooks or short recordings. Stored only on this server."
+    />
   );
 }
 
@@ -170,7 +190,21 @@ function UrlsCard({ companyId, urls }: { companyId: number; urls: AppUrl[] }) {
   );
 }
 
-function DocsCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
+function DocsCard({
+  companyId,
+  docs: allDocs,
+  section,
+  heading,
+  blurb,
+}: {
+  companyId: number;
+  docs: AppDoc[];
+  section: "docs" | "kt";
+  heading: string;
+  blurb: string;
+}) {
+  const docs = allDocs.filter((d) => (d.section ?? "docs") === section);
+  const pfx = `${section}-`;
   const { csrf } = useAdmin();
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -184,7 +218,7 @@ function DocsCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
   async function addLink(e: React.FormEvent) {
     e.preventDefault();
     setBusy("link");
-    const r = await adminFetch(csrf, `/api/nexus-admin/companies/${companyId}/application/docs`, "POST", link);
+    const r = await adminFetch(csrf, `/api/nexus-admin/companies/${companyId}/application/docs`, "POST", { ...link, section });
     setBusy(null);
     if (!r.ok) {
       setLinkErrors(r.fields ?? {});
@@ -205,6 +239,7 @@ function DocsCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
     for (const file of Array.from(files)) {
       const form = new FormData();
       form.set("file", file);
+      form.set("section", section);
       if (files.length === 1 && upTitle.trim()) form.set("title", upTitle.trim());
       try {
         const response = await fetch(`/api/nexus-admin/companies/${companyId}/application/docs`, {
@@ -242,11 +277,11 @@ function DocsCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
   }
 
   return (
-    <section className="card card-pad stack" aria-labelledby="app-docs">
+    <section className="card card-pad stack" aria-labelledby={`${pfx}heading`}>
       <div>
-        <h2 id="app-docs" style={{ marginBottom: 4 }}>Project documentation</h2>
+        <h2 id={`${pfx}heading`} style={{ marginBottom: 4 }}>{heading}</h2>
         <p className="muted small" style={{ margin: 0 }}>
-          Links to existing documents, or files uploaded to the Nexus server (Markdown, text, PDF, Word or images, up to 20 MB each). Stored only on this server.
+          {blurb} Accepted: PDF, Word, Excel, PowerPoint, Markdown, text, CSV, images and MP4, up to 50 MB each.
         </p>
       </div>
       {docs.length ? (
@@ -290,20 +325,20 @@ function DocsCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
           </table>
         </div>
       ) : (
-        <p className="muted small" style={{ margin: 0 }}>No documentation yet.</p>
+        <p className="muted small" style={{ margin: 0 }}>{section === "kt" ? "No KT files yet." : "No documentation yet."}</p>
       )}
       <Msg m={msg} />
       <div className="grid-2">
         <form className="card card-pad form" onSubmit={upload} noValidate>
           <h3 style={{ margin: 0 }}>Upload files</h3>
           <div className="field">
-            <label htmlFor="doc-file">Files</label>
-            <input id="doc-file" ref={fileRef} type="file" className="input" accept={ACCEPT} multiple />
+            <label htmlFor={`${pfx}doc-file`}>Files</label>
+            <input id={`${pfx}doc-file`} ref={fileRef} type="file" className="input" accept={ACCEPT} multiple />
             <span className="help">You can choose several files at once.</span>
           </div>
           <div className="field">
-            <label htmlFor="doc-up-title">Title <span className="muted">(optional, single file only)</span></label>
-            <input id="doc-up-title" className="input" value={upTitle} onChange={(e) => setUpTitle(e.target.value)} placeholder="Defaults to the file name" />
+            <label htmlFor={`${pfx}doc-up-title`}>Title <span className="muted">(optional, single file only)</span></label>
+            <input id={`${pfx}doc-up-title`} className="input" value={upTitle} onChange={(e) => setUpTitle(e.target.value)} placeholder="Defaults to the file name" />
           </div>
           <div className="row">
             <button className="btn btn-blue" disabled={busy !== null}>{busy === "upload" ? <span className="spin" aria-hidden="true" /> : <IPlus />}Upload</button>
@@ -312,13 +347,13 @@ function DocsCard({ companyId, docs }: { companyId: number; docs: AppDoc[] }) {
         <form className="card card-pad form" onSubmit={addLink} noValidate>
           <h3 style={{ margin: 0 }}>Add a link</h3>
           <div className="field" data-invalid={Boolean(linkErrors.title)}>
-            <label htmlFor="doc-title">Title</label>
-            <input id="doc-title" className="input" value={link.title} onChange={(e) => setLink({ ...link, title: e.target.value })} placeholder="Architecture overview" />
+            <label htmlFor={`${pfx}doc-title`}>Title</label>
+            <input id={`${pfx}doc-title`} className="input" value={link.title} onChange={(e) => setLink({ ...link, title: e.target.value })} placeholder="Architecture overview" />
             {linkErrors.title ? <span className="err">{linkErrors.title}</span> : null}
           </div>
           <div className="field" data-invalid={Boolean(linkErrors.url)}>
-            <label htmlFor="doc-url">Link</label>
-            <input id="doc-url" type="url" className="input" value={link.url} onChange={(e) => setLink({ ...link, url: e.target.value })} placeholder="https://docs.google.com/…" />
+            <label htmlFor={`${pfx}doc-url`}>Link</label>
+            <input id={`${pfx}doc-url`} type="url" className="input" value={link.url} onChange={(e) => setLink({ ...link, url: e.target.value })} placeholder="https://docs.google.com/…" />
             {linkErrors.url ? <span className="err">{linkErrors.url}</span> : null}
           </div>
           <div className="row">

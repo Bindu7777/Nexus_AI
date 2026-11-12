@@ -114,3 +114,33 @@ test("uploads accept documents, check content against the extension, and stay sc
   assert.match(audit, /application.doc_uploaded/);
   assert.doesNotMatch(audit, /Setup notes/, "file contents never go to the audit log");
 });
+
+test("KT files are kept in their own section and accept office files, CSV and MP4", () => {
+  const id = company("KT");
+  const ole = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0, 0, 0]);
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from("ftypisom"), Buffer.alloc(16)]);
+  for (const [name, bytes] of [
+    ["handover.doc", ole],
+    ["handover.pptx", zip],
+    ["owners.xlsx", zip],
+    ["legacy.ppt", ole],
+    ["services.csv", Buffer.from("service,owner\napi,team-a\n")],
+    ["walkthrough.mp4", mp4],
+  ] as const) {
+    const r = addDocFile(id, { name, bytes }, { section: "kt" }, actor, ip);
+    assert.ok(r.ok, `${name}: ${r.ok ? "" : r.error}`);
+  }
+  assert.equal(addDocFile(id, { name: "renamed.pptx", bytes: Buffer.from("plain text") }, { section: "kt" }, actor, ip).ok, false, "content must match extension");
+  assert.equal(addDocFile(id, { name: "fake.mp4", bytes: Buffer.from("not a video at all") }, { section: "kt" }, actor, ip).ok, false);
+  assert.ok(addDocFile(id, { name: "spec.md", bytes: Buffer.from("# Spec\n") }, {}, actor, ip).ok, "default section is docs");
+  assert.ok(addDocLink(id, { title: "KT recording", url: "https://drive.example/kt", section: "kt" }, actor, ip).ok);
+  assert.ok(addDocFile(id, { name: "odd.md", bytes: Buffer.from("# x\n") }, { section: "elsewhere" }, actor, ip).ok, "unknown section falls back to docs");
+
+  const docs = getApplication(id).docs;
+  assert.equal(docs.filter((d) => d.section === "kt").length, 7);
+  assert.equal(docs.filter((d) => d.section === "docs").length, 2);
+  const actions = (getDb().prepare("SELECT action FROM audit_log WHERE company_id = ?").all(id) as { action: string }[]).map((r) => r.action);
+  assert.ok(actions.includes("application.kt_uploaded"));
+  assert.ok(actions.includes("application.kt_link_added"));
+});

@@ -236,6 +236,15 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       CREATE INDEX company_docs_company ON company_docs (company_id, created_at);
     `,
   },
+  {
+    version: 5,
+    name: "knowledge transfer (KT) files",
+    sql: `
+      -- Documents belong to a section: project documentation, or knowledge-transfer (KT) material.
+      ALTER TABLE company_docs ADD COLUMN section TEXT NOT NULL DEFAULT 'docs' CHECK (section IN ('docs','kt'));
+      CREATE INDEX company_docs_section ON company_docs (company_id, section, created_at);
+    `,
+  },
 ];
 
 export function dbPath() {

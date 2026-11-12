@@ -9,7 +9,7 @@ import { canCreateLogins, displayStatus, getCompany, goLiveBlockers } from "@/ne
 import { listCompanyConnectors } from "@/nexus-admin/server/connectors";
 import { requireAdminPage } from "@/nexus-admin/server/page-guard";
 import { listUsers } from "@/nexus-admin/server/users";
-import { ApplicationPanel } from "@/nexus-admin/ui/application";
+import { ApplicationPanel, KtCard } from "@/nexus-admin/ui/application";
 import { CompanyStatusChip, fmtTime, ResultChip } from "@/nexus-admin/ui/chips";
 import { GoLiveButton, PauseResume, UsersPanel } from "@/nexus-admin/ui/company";
 import { ConnectorCard, HealthDots, TestAllButton } from "@/nexus-admin/ui/connectors";
@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 const TABS = [
   { id: "overview", title: "Overview" },
   { id: "application", title: "Application" },
+  { id: "kt", title: "KT files" },
   { id: "health", title: "Connection health" },
   { id: "logins", title: "Logins" },
   { id: "usage", title: "Usage" },
@@ -88,6 +89,8 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
       ) : null}
 
       {tab === "application" ? <ApplicationPanel companyId={company.id} app={getApplication(company.id)} /> : null}
+
+      {tab === "kt" ? <KtCard companyId={company.id} docs={getApplication(company.id).docs} /> : null}
 
       {tab === "health" ? (
         <div className="stack">

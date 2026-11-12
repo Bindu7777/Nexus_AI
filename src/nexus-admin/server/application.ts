@@ -11,23 +11,38 @@ import { getDb, nowIso } from "./db";
 export const ENVIRONMENTS = ["production", "staging", "development", "other"] as const;
 export type Environment = (typeof ENVIRONMENTS)[number];
 
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-/** Extension → MIME type, and how to recognise the file's real content. */
-export const ALLOWED_UPLOADS: Record<string, { mime: string; magic?: number[] }> = {
+export const SECTIONS = ["docs", "kt"] as const;
+export type DocSection = (typeof SECTIONS)[number];
+export const isSection = (s: unknown): s is DocSection => s === "docs" || s === "kt";
+
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+const ZIP = [0x50, 0x4b, 0x03, 0x04]; // docx, xlsx, pptx are zip containers
+const OLE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // legacy .doc, .xls, .ppt
+/** Extension → MIME type, and how to recognise the file's real content (bytes at an offset). */
+export const ALLOWED_UPLOADS: Record<string, { mime: string; magic?: number[]; at?: number }> = {
   ".md": { mime: "text/markdown" },
   ".markdown": { mime: "text/markdown" },
   ".txt": { mime: "text/plain" },
+  ".csv": { mime: "text/csv" },
   ".pdf": { mime: "application/pdf", magic: [0x25, 0x50, 0x44, 0x46] }, // %PDF
-  ".docx": { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", magic: [0x50, 0x4b, 0x03, 0x04] }, // zip
+  ".doc": { mime: "application/msword", magic: OLE },
+  ".docx": { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", magic: ZIP },
+  ".xls": { mime: "application/vnd.ms-excel", magic: OLE },
+  ".xlsx": { mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", magic: ZIP },
+  ".ppt": { mime: "application/vnd.ms-powerpoint", magic: OLE },
+  ".pptx": { mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", magic: ZIP },
   ".png": { mime: "image/png", magic: [0x89, 0x50, 0x4e, 0x47] },
   ".jpg": { mime: "image/jpeg", magic: [0xff, 0xd8, 0xff] },
   ".jpeg": { mime: "image/jpeg", magic: [0xff, 0xd8, 0xff] },
+  ".mp4": { mime: "video/mp4", magic: [0x66, 0x74, 0x79, 0x70], at: 4 }, // "ftyp" at byte 4
 };
 
 export type AppInfo = { name: string; description: string; updatedAt: string | null };
 export type AppUrl = { id: number; label: string; url: string; environment: Environment; notes: string; createdAt: string };
 export type AppDoc = {
   id: number;
+  section: DocSection;
   kind: "link" | "file";
   title: string;
   url: string | null;
@@ -75,6 +90,7 @@ export function getApplication(companyId: number) {
   }[]).map((r) => ({ id: r.id, label: r.label, url: r.url, environment: r.environment, notes: r.notes, createdAt: r.created_at }));
   const docs = (db.prepare("SELECT * FROM company_docs WHERE company_id = ? ORDER BY id DESC").all(companyId) as {
     id: number;
+    section: DocSection;
     kind: "link" | "file";
     title: string;
     url: string | null;
@@ -87,6 +103,7 @@ export function getApplication(companyId: number) {
   }[]).map(
     (r): AppDoc => ({
       id: r.id,
+      section: r.section,
       kind: r.kind,
       title: r.title,
       url: r.url,
@@ -165,10 +182,11 @@ export function addDocLink(companyId: number, raw: Record<string, unknown>, acto
   if (urlError) errors.url = urlError;
   if (!title) errors.title = "Give the document a title.";
   if (Object.keys(errors).length) return { ok: false as const, errors };
+  const section: DocSection = isSection(raw.section) ? raw.section : "docs";
   const info = getDb()
-    .prepare("INSERT INTO company_docs (company_id, kind, title, url, notes, created_at, created_by) VALUES (?, 'link', ?, ?, ?, ?, ?)")
-    .run(companyId, title, url, notes, nowIso(), actor.label);
-  audit({ actor, action: "application.doc_link_added", result: "ok", companyId, target: title, ip });
+    .prepare("INSERT INTO company_docs (company_id, section, kind, title, url, notes, created_at, created_by) VALUES (?, ?, 'link', ?, ?, ?, ?, ?)")
+    .run(companyId, section, title, url, notes, nowIso(), actor.label);
+  audit({ actor, action: section === "kt" ? "application.kt_link_added" : "application.doc_link_added", result: "ok", companyId, target: title, ip });
   return { ok: true as const, id: Number(info.lastInsertRowid) };
 }
 
@@ -176,7 +194,7 @@ export function addDocLink(companyId: number, raw: Record<string, unknown>, acto
 export function addDocFile(
   companyId: number,
   file: { name: string; bytes: Buffer },
-  meta: { title?: string; notes?: string },
+  meta: { title?: string; notes?: string; section?: unknown },
   actor: Actor,
   ip: string,
 ) {
@@ -184,11 +202,11 @@ export function addDocFile(
   const ext = path.extname(original).toLowerCase();
   const allowed = ALLOWED_UPLOADS[ext];
   if (!allowed) {
-    return { ok: false as const, error: `Upload Markdown, text, PDF, Word (.docx) or image files. ${ext || "This file"} is not accepted.` };
+    return { ok: false as const, error: `Upload PDF, Word, Excel, PowerPoint, Markdown, text, CSV, image or MP4 files. ${ext || "This file"} is not accepted.` };
   }
   if (file.bytes.length === 0) return { ok: false as const, error: "The file is empty." };
   if (file.bytes.length > MAX_UPLOAD_BYTES) return { ok: false as const, error: `Files can be at most ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.` };
-  if (allowed.magic && !allowed.magic.every((b, i) => file.bytes[i] === b)) {
+  if (allowed.magic && !allowed.magic.every((b, i) => file.bytes[(allowed.at ?? 0) + i] === b)) {
     return { ok: false as const, error: `The file's content does not match its ${ext} extension.` };
   }
   if (!allowed.magic && file.bytes.subarray(0, 8000).includes(0)) {
@@ -200,13 +218,22 @@ export function addDocFile(
   fs.writeFileSync(path.join(dir, stored), file.bytes, { mode: 0o600, flag: "wx" });
   const sha256 = createHash("sha256").update(file.bytes).digest("hex");
   const title = str(meta.title, 160) || original;
+  const section: DocSection = isSection(meta.section) ? meta.section : "docs";
   const info = getDb()
     .prepare(
-      `INSERT INTO company_docs (company_id, kind, title, file_name, stored_name, mime, size_bytes, sha256, notes, created_at, created_by)
-       VALUES (?, 'file', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO company_docs (company_id, section, kind, title, file_name, stored_name, mime, size_bytes, sha256, notes, created_at, created_by)
+       VALUES (?, ?, 'file', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(companyId, title, original, stored, allowed.mime, file.bytes.length, sha256, str(meta.notes, 500), nowIso(), actor.label);
-  audit({ actor, action: "application.doc_uploaded", result: "ok", companyId, target: title, ip, detail: { bytes: file.bytes.length, type: ext, sha256 } });
+    .run(companyId, section, title, original, stored, allowed.mime, file.bytes.length, sha256, str(meta.notes, 500), nowIso(), actor.label);
+  audit({
+    actor,
+    action: section === "kt" ? "application.kt_uploaded" : "application.doc_uploaded",
+    result: "ok",
+    companyId,
+    target: title,
+    ip,
+    detail: { bytes: file.bytes.length, type: ext, sha256 },
+  });
   return { ok: true as const, id: Number(info.lastInsertRowid) };
 }
 

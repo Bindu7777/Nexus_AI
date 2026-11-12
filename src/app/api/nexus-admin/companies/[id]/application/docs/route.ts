@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: Ctx) {
       const result = addDocFile(
         companyId,
         { name: file.name, bytes: Buffer.from(await file.arrayBuffer()) },
-        { title: String(form.get("title") ?? ""), notes: String(form.get("notes") ?? "") },
+        { title: String(form.get("title") ?? ""), notes: String(form.get("notes") ?? ""), section: form.get("section") },
         ctx.actor,
         ctx.ip,
       );
