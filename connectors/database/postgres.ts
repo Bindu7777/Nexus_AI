@@ -26,6 +26,8 @@ export type PostgresConfig = {
   connectionString?: string;
   schemas?: string[];
   ssl?: "require" | "verify" | "disable";
+  /** PEM text of a custom CA; when set the server certificate is verified against it. */
+  caCert?: string;
   sampling?: { enabled: boolean; reportable?: boolean; maxRows?: number };
   statementTimeoutMs?: number;
   /** Injected in tests. Defaults to node-postgres, loaded on first use. */
@@ -92,7 +94,12 @@ const KIND: Record<string, SchemaSnapshot["tables"][number]["kind"]> = {
 async function defaultFactory(config: PostgresConfig): Promise<DbClient> {
   const pg = await import("pg");
   const Client = (pg.default?.Client ?? (pg as unknown as { Client: typeof pg.Client }).Client) as typeof pg.Client;
-  const ssl = config.ssl === "disable" ? false : { rejectUnauthorized: config.ssl === "verify" };
+  const ssl =
+    config.ssl === "disable"
+      ? false
+      : config.caCert
+        ? { rejectUnauthorized: true, ca: config.caCert }
+        : { rejectUnauthorized: config.ssl === "verify" };
   return new Client({
     connectionString: config.connectionString,
     ssl,
