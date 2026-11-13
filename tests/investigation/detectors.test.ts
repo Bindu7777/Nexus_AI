@@ -130,7 +130,7 @@ test("a partial lock pattern is a weak lead, never a cause, and matches the engi
 test("without load measurements (a real company), detector 1 is skipped, not run", () => {
   const run = runDetectors(ctxFor()).find((r) => r.detectorId === "lock-contention")!;
   assert.equal(run.status, "skipped");
-  assert.match(run.reason ?? "", /load_measurements/);
+  assert.match(run.reason ?? "", /load measurements from a service that reports lock timings/);
 });
 
 test("ranking does not average across detectors, flags ties, and separates weak leads", () => {

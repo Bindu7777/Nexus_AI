@@ -179,7 +179,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
     }
     ticket = read.ticket;
     const ticketItem: EvidenceItem = {
-      source: ticket.source,
+      source: ticket.source === "jira" ? "Jira" : "GitHub Issues",
       kind: "tickets",
       ref: `ticket:${ticket.source}:${ticket.key}`,
       timestamp: ticket.updatedAt ?? ticket.createdAt,
@@ -258,7 +258,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
         continue;
       }
       try {
-        const items = (await withTimeout(gatherOne(s), sourceMs, s.name)).map((e) => sanitizeEvidence(e, s.secretValues));
+        const items = (await withTimeout(gatherOne(s), sourceMs, s.name)).map((e) => sanitizeEvidence({ ...e, source: s.name }, s.secretValues));
         evidence.push(...items);
         r.evidence("gather", items);
         sourceLines.push({
@@ -340,7 +340,14 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
       const tie = top.tiedWith.length ? ` It is tied with ${top.tiedWith.join(", ")}.` : "";
       return build("diagnosed", `${top.cause}.${tie} No fix has been proven yet.`);
     }
-    return build("not_enough_evidence", "No detector found a cause that passes its threshold. The evidence read and what could not be verified are listed.");
+    const pieces = evidence.length;
+    const runnable = detectorRuns.filter((d) => d.status === "ran").length;
+    return build(
+      "not_enough_evidence",
+      runnable
+        ? `Read ${pieces} piece${pieces === 1 ? "" : "s"} of evidence, but none of the ${runnable} detector${runnable === 1 ? "" : "s"} that could run found a cause.`
+        : `Read ${pieces} piece${pieces === 1 ? "" : "s"} of evidence, but none of Nexus's detectors had the inputs they need for this defect, so no cause is claimed.`,
+    );
   } catch (error) {
     if (error instanceof Cancelled) {
       const at = STAGES.find((s) => !finished.has(s.id));

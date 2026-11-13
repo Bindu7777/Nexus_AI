@@ -50,6 +50,17 @@ export type Verdict = keyof typeof VERDICTS;
 /** Kinds of evidence a detector can require. A detector runs only when all of them exist. */
 export type EvidenceKind = "reproduction" | "commits" | "schema" | "query_stats" | "logs" | "load_measurements" | "located_code" | "first_report";
 
+export const EVIDENCE_KIND_LABEL: Record<EvidenceKind, string> = {
+  reproduction: "a reproduction run",
+  commits: "recent commits",
+  schema: "the database schema",
+  query_stats: "query statistics",
+  logs: "logs",
+  load_measurements: "load measurements from a service that reports lock timings",
+  located_code: "located code",
+  first_report: "the time the defect was first reported",
+};
+
 /**
  * Load measurements from the demo catalog path, exactly as the frozen engine's
  * diagnose() consumes them. Only the demo, or a service under test that emits

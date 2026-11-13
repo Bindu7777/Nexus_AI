@@ -1,6 +1,6 @@
 // Detector registry and ranking. Definitions come from ./defs through the
 // generated index (npm run connectors:index rebuilds both indexes).
-import type { Detector, DetectorContext, DetectorResult, Finding } from "../types";
+import { type Detector, type DetectorContext, type DetectorResult, EVIDENCE_KIND_LABEL, type Finding } from "../types";
 import { DETECTORS } from "./index.generated";
 
 const ID = /^[a-z0-9][a-z0-9-]{1,40}$/;
@@ -55,7 +55,10 @@ export function runDetectors(ctx: DetectorContext, registry: DetectorRegistry = 
     } catch (error) {
       return { detectorId: d.id, name: d.name, status: "error", reason: error instanceof Error ? error.message : String(error), result: null };
     }
-    if (!applies) return { detectorId: d.id, name: d.name, status: "skipped", reason: `Needs: ${d.requires.join(", ")}.`, result: null };
+    if (!applies) {
+      const needs = d.requires.map((r) => EVIDENCE_KIND_LABEL[r] ?? r);
+      return { detectorId: d.id, name: d.name, status: "skipped", reason: `It needs ${needs.join(" and ")}, which this investigation does not have.`, result: null };
+    }
     try {
       return { detectorId: d.id, name: d.name, status: "ran", reason: null, result: d.check(ctx) };
     } catch (error) {

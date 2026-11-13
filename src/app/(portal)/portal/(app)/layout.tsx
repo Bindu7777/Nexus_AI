@@ -35,7 +35,8 @@ export default async function PortalAppLayout({ children }: { children: React.Re
           <span className="p-co-name">{company.name}</span>
         </span>
         <nav className="p-nav" aria-label="Portal">
-          <Link href="/portal" aria-current="page">Investigate</Link>
+          <Link href="/portal">Investigate</Link>
+          <Link href="/portal/investigations">{user.role === "company_admin" ? "All investigations" : "My investigations"}</Link>
         </nav>
         <span className="p-spacer" />
         <ThemeToggle />

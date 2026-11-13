@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export type HomeSource = { id: number; name: string; category: string; categoryTitle: string; state: "healthy" | "failing" | "untested" };
+export type RecentRun = { id: string; ticketKey: string; status: string; verdict: string | null; verdictLabel: string | null; createdAt: string; queuePosition: number | null };
 export type HomeProps = {
   csrf: string;
+  recent: RecentRun[];
   firstName: string;
   company: { name: string; code: string; liveSince: string | null; website: string | null };
   sources: HomeSource[];
@@ -51,8 +55,13 @@ function monogram(name: string) {
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
-export function PortalHome({ csrf, firstName, company, sources, defect }: HomeProps) {
+const fmtShort = (iso: string) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+export function PortalHome({ csrf, recent, firstName, company, sources, defect }: HomeProps) {
+  const router = useRouter();
   const [value, setValue] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [earlier, setEarlier] = useState<{ id: string; key: string; message: string } | null>(null);
   const [check, setCheck] = useState<Check>({ state: "idle" });
   const [submitted, setSubmitted] = useState<Check | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,7 +105,31 @@ export function PortalHome({ csrf, firstName, company, sources, defect }: HomePr
     }
     const result = await validate(t);
     setCheck(result);
-    setSubmitted(result);
+    setSubmitted(result.state === "bad" ? result : null);
+    if (result.state === "ok") await launch(t, false);
+  }
+
+  async function launch(t: string, force: boolean) {
+    setStarting(true);
+    setEarlier(null);
+    try {
+      const r = await fetch("/api/investigations", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-csrf-token": csrf },
+        body: JSON.stringify({ defect: t, force }),
+      });
+      const data = (await r.json()) as { ok: boolean; id?: string; error?: string; recent?: { id: string } | null };
+      if (data.ok && data.id) {
+        router.push(`/portal/investigations/${data.id}`);
+        return;
+      }
+      if (r.status === 409 && data.recent) setEarlier({ id: data.recent.id, key: check.key ?? t, message: data.error ?? "" });
+      else setSubmitted({ state: "bad", message: data.error ?? "The investigation could not start." });
+    } catch {
+      setSubmitted({ state: "bad", message: "The Nexus server could not be reached. Check your connection." });
+    }
+    setStarting(false);
   }
 
   const healthy = sources.filter((s) => s.state === "healthy").length;
@@ -143,8 +176,9 @@ export function PortalHome({ csrf, firstName, company, sources, defect }: HomePr
             aria-describedby="cmd-status cmd-hint"
             aria-invalid={check.state === "bad"}
           />
-          <button className="btn btn-main" type="submit">
-            Start investigation <Arrow />
+          <button className="btn btn-main" type="submit" disabled={starting}>
+            {starting ? <span className="spin" aria-hidden="true" /> : null}
+            {starting ? "Starting…" : <>Start investigation <Arrow /></>}
           </button>
         </div>
         <div id="cmd-status" className="cmd-status" aria-live="polite">
@@ -163,22 +197,13 @@ export function PortalHome({ csrf, firstName, company, sources, defect }: HomePr
           )}
         </p>
 
-        {submitted?.state === "ok" ? (
+        {earlier ? (
           <div className="ready" role="status">
-            <div className="ready-head">
-              <span className="ready-key mono">{submitted.key}</span>
-              <span className="muted">is in {submitted.where}</span>
+            <p>{earlier.message}</p>
+            <div className="row">
+              <Link className="btn btn-blue btn-sm" href={`/portal/investigations/${earlier.id}`}>Open the earlier report</Link>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => launch(value.trim(), true)} disabled={starting}>Run it again</button>
             </div>
-            <ol className="ready-steps">
-              <li><span>1</span>Read the ticket from {submitted.where}</li>
-              <li><span>2</span>Gather evidence from {sources.filter((s) => s.state === "healthy" && s.category !== "defects").map((s) => s.name).join(", ") || "connected sources"}</li>
-              <li><span>3</span>Apply Nexus&apos;s fixed rules, or say plainly what is missing</li>
-              <li><span>4</span>Suggest a fix only when the evidence supports one. You approve it.</li>
-            </ol>
-            <p className="note warn small">
-              <Alert />
-              The number is valid, but investigations are not switched on in this build yet. They arrive in the next step; nothing was read from Jira.
-            </p>
           </div>
         ) : null}
         {submitted?.state === "bad" && check.state !== "bad" ? <p className="cmd-bad small"><Alert /> {submitted.message}</p> : null}
@@ -212,19 +237,36 @@ export function PortalHome({ csrf, firstName, company, sources, defect }: HomePr
       <section aria-labelledby="recent-title">
         <div className="spread sec-head">
           <h2 id="recent-title">Your recent investigations</h2>
+          {recent.length ? <Link href="/portal/investigations" className="small">See all</Link> : null}
         </div>
-        <div className="card recent-empty">
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-            <rect x="8" y="6" width="26" height="34" rx="4" />
-            <path d="M14 15h14M14 21h14M14 27h8" />
-            <circle cx="33" cy="32" r="7" />
-            <path d="m38 37 5 5" />
-          </svg>
-          <div>
-            <strong>No investigations yet</strong>
-            <p className="muted small">Each report you run lists the evidence it read, what it could not verify, and any suggested fix waiting for your approval.</p>
+        {recent.length === 0 ? (
+          <div className="card recent-empty">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+              <rect x="8" y="6" width="26" height="34" rx="4" />
+              <path d="M14 15h14M14 21h14M14 27h8" />
+              <circle cx="33" cy="32" r="7" />
+              <path d="m38 37 5 5" />
+            </svg>
+            <div>
+              <strong>No investigations yet</strong>
+              <p className="muted small">Each report you run lists the evidence it read, what it could not verify, and any suggested fix waiting for your approval.</p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <ul className="hist-list">
+            {recent.map((r) => (
+              <li key={r.id}>
+                <Link href={`/portal/investigations/${r.id}`} className="hist-row">
+                  <span className="mono hist-key">{r.ticketKey}</span>
+                  <span className={`hist-verdict v-${r.verdict ?? r.status}`}>
+                    {r.verdictLabel ?? (r.status === "queued" ? `Queued${r.queuePosition ? ` · #${r.queuePosition}` : ""}` : r.status === "running" ? "Investigating…" : r.status === "cancelled" ? "Cancelled" : r.status)}
+                  </span>
+                  <span className="muted small">{fmtShort(r.createdAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
