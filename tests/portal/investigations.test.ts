@@ -374,3 +374,14 @@ test("the Jira full read is one GET with no body, and maps comments and links", 
   assert.equal(seen[0].body, null);
   assert.match(seen[0].url, /\/rest\/api\/3\/issue\/KAN-12\?fields=/);
 });
+
+test("stored JSON: oversized values stay parseable, and old cut-off rows do not crash the page", async () => {
+  const { boundedJson, parseJsonObject } = await import("../../src/portal/server/investigations.ts");
+  const big = { text: "x".repeat(70_000) };
+  const stored = boundedJson(big, 60_000);
+  assert.ok(stored.length < 200);
+  assert.deepEqual(JSON.parse(stored), { truncated: true, originalChars: JSON.stringify(big).length });
+  assert.equal(boundedJson({ a: 1 }, 60_000), '{"a":1}');
+  assert.deepEqual(parseJsonObject(JSON.stringify(big).slice(0, 60_000)), { truncated: true });
+  assert.deepEqual(parseJsonObject(null), {});
+});

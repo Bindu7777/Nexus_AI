@@ -320,7 +320,16 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
         }));
         evidence.push(...items);
         r.evidence("reproduce", items);
-        r.finish("reproduce", "done", repro.summary, { reproduction: repro, liveLogs: liveLogLines });
+        // The full reproduction goes in the report; the stage keeps a short summary.
+        r.finish("reproduce", "done", repro.summary, {
+          reproduced: repro.reproduced,
+          reproducedRuns: repro.reproducedRuns,
+          totalRuns: repro.totalRuns,
+          inconclusive: repro.inconclusive,
+          needsSignIn: repro.needsSignIn,
+          liveLogs: liveLogLines,
+        });
+        if (repro.inconclusive) couldNotVerify.push(`${repro.needsSignIn.join(", ")} need${repro.needsSignIn.length === 1 ? "s" : ""} a signed-in customer and could not be checked. An admin can save the test account's password under the service under test.`);
         if (!repro.loggedIn && repro.reproduction.steps.some((s) => s.kind === "login")) couldNotVerify.push("The test account could not sign in, so pages that need a signed-in customer were seen as a visitor.");
         if (!repro.reproduction.steps.some((s) => s.kind === "login")) couldNotVerify.push("No test account is configured, so the reproduction ran as an anonymous visitor.");
         if (repro.blockedHosts.length) couldNotVerify.push(`Requests to ${repro.blockedHosts.join(", ")} were blocked because those hosts are not allowed. An admin can add them under the service under test.`);
@@ -468,6 +477,9 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
       const top = causes[0];
       const tie = top.tiedWith.length ? ` It is tied with ${top.tiedWith.join(", ")}.` : "";
       return build("diagnosed", `${top.cause}.${tie} No fix has been proven yet.`);
+    }
+    if (repro?.status === "ran" && repro.inconclusive) {
+      return build("not_enough_evidence", `${repro.summary} Static evidence is shown, with what could not be verified.`);
     }
     if (repro?.status === "ran" && !repro.reproduced) {
       return build("not_reproduced", `${repro.summary} Static evidence is shown, with what could not be verified.`);

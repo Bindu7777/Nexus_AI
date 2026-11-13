@@ -14,6 +14,8 @@ export type RunResult = {
   index: number;
   reproduced: boolean;
   assertions: Assertion[];
+  /** Pages that showed a sign-in prompt instead of their content (run not signed in). */
+  needsSignIn?: string[];
   pages: PageObservation[];
   blocked: { method: string; url: string; reason: string; kind: string }[];
   requestsSent: number;
@@ -123,6 +125,14 @@ export async function runOnce(input: {
         await sleep(1500);
         obs.finalUrl = page.url();
         obs.text = (await page.innerText("body", { timeout: 5000 }).catch(() => "")).replace(/\s+\n/g, "\n").slice(0, 20_000);
+        const shape = await page
+          .evaluate(() => {
+            const body = document.body.cloneNode(true) as HTMLElement;
+            body.querySelectorAll("header, nav, footer, [role=banner], [role=navigation], [role=contentinfo], script, style").forEach((n) => n.remove());
+            return { mainText: (body.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 2000), hasPasswordField: !!document.querySelector("input[type=password]") };
+          })
+          .catch(() => null);
+        if (shape) Object.assign(obs, shape);
       } catch (e) {
         obs.error = timedOut ? "The run reached its time limit." : (e instanceof Error ? e.message.split("\n")[0] : String(e)).slice(0, 300);
       }
@@ -140,11 +150,12 @@ export async function runOnce(input: {
     await server.close().catch(() => undefined);
   }
   if (timedOut && !error) error = "The run reached its time limit and was stopped.";
-  const verdict = judgeRun(input.reproduction, pages);
+  const verdict = judgeRun(input.reproduction, pages, { loggedIn: !!loginResult?.ok });
   return {
     index: input.index,
     reproduced: !timedOut && !error && verdict.reproduced,
     assertions: verdict.assertions,
+    needsSignIn: verdict.needsSignIn,
     pages,
     blocked,
     requestsSent: sent,

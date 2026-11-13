@@ -395,3 +395,47 @@ test("pipeline: step paths are pulled from URLs and bare paths", async () => {
   const { stepPaths } = await import("../../src/investigation/pipeline.ts");
   assert.deepEqual(stepPaths(spec.steps), ["/category/venues", "/liked-vendors", "/page"]);
 });
+
+// ---------- sign-in walls ----------
+
+test("judge: a page that only shows a sign-in prompt is inconclusive, not a pass", async () => {
+  const { judgeRun, looksLikeSignInWall } = await import("../../src/investigation/repro/judge.ts");
+  const plan = buildReproduction(spec, "https://happymomentsindia.com", {});
+  assert.ok(plan.ok);
+  if (!plan.ok) return;
+  const base = { status: 200, pageErrors: [], consoleErrors: [], htmlForData: [], failedData: [], error: null };
+  const wall = { ...base, url: "https://happymomentsindia.com/liked-vendors", finalUrl: "https://happymomentsindia.com/liked-vendors", text: "HappyMoments Categories Login Sign Up\nLogin", mainText: "Login" };
+  const venues = { ...base, url: "https://happymomentsindia.com/category/venues", finalUrl: "https://happymomentsindia.com/category/venues", text: "Venues ...", mainText: "Venues in Hyderabad. ".repeat(30) };
+  assert.equal(looksLikeSignInWall(wall), true);
+  assert.equal(looksLikeSignInWall(venues), false);
+  assert.equal(looksLikeSignInWall({ ...venues, finalUrl: "https://happymomentsindia.com/customer-login" }), true);
+  assert.equal(looksLikeSignInWall({ ...venues, hasPasswordField: true }), true);
+  const visitor = judgeRun(plan.reproduction, [venues, wall]);
+  assert.equal(visitor.reproduced, false);
+  assert.deepEqual(visitor.needsSignIn, ["/liked-vendors"]);
+  assert.ok(visitor.assertions.some((a) => a.name === "Page shows its content" && !a.passed && !a.showsDefect));
+  // Signed in, the same short page is judged on its own merits.
+  assert.deepEqual(judgeRun(plan.reproduction, [wall], { loggedIn: true }).needsSignIn, []);
+});
+
+test("reproduceDefect: sign-in walls make the result inconclusive, and the pipeline does not say Not reproduced", async () => {
+  const service = {
+    config: { serviceUrl: "https://happymomentsindia.com", environmentName: "production", productionReadOnly: true, testUsername: "tester@example.com", loginPath: "/customer-login" },
+    scope: { allowedEnvironments: ["production"] },
+    secrets: {},
+    deployment: "cloud" as const,
+  };
+  const out = await reproduceDefect({
+    spec,
+    service: service as never,
+    workDir: fs.mkdtempSync(path.join(os.tmpdir(), "nexus-repro-")),
+    runner: async (input) => ({ index: input.index, reproduced: false, assertions: [], needsSignIn: ["/liked-vendors"], pages: [], blocked: [], requestsSent: 3, login: null, screenshot: null, timedOut: false, error: null, durationMs: 5 }),
+  });
+  assert.equal(out.status, "ran");
+  if (out.status !== "ran") return;
+  assert.equal(out.inconclusive, true);
+  assert.match(out.summary, /^Inconclusive: \/liked-vendors showed a sign-in prompt .* no password is saved for the test account tester@example\.com/);
+  const { res } = await runWith(async () => out);
+  assert.equal(res.verdict, "not_enough_evidence");
+  assert.ok(res.report.couldNotVerify.some((c) => c.includes("/liked-vendors needs a signed-in customer")));
+});

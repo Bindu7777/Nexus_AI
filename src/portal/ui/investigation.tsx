@@ -356,7 +356,7 @@ function ReproductionView({ id, repro }: { id: string; repro: NonNullable<Report
         <h2>Reproduction</h2>
         <span className={`tag ${repro.reproduced ? "tag-ok" : "tag-abstain"}`}>
           <Icon name={repro.reproduced ? "check" : "info"} />
-          {repro.reproduced ? `Reproduced ${repro.reproducedRuns}/${repro.totalRuns}` : `Not reproduced 0/${repro.totalRuns}`}
+          {repro.reproduced ? `Reproduced ${repro.reproducedRuns}/${repro.totalRuns}` : repro.inconclusive ? "Inconclusive · needs sign-in" : `Not reproduced 0/${repro.totalRuns}`}
           {repro.flaky ? " · flaky" : ""}
         </span>
       </div>

@@ -16,18 +16,48 @@ export type PageObservation = {
   failedData: { url: string; status: number }[];
   /** Visible text of the page, trimmed. */
   text: string;
+  /** Visible text without the header, navigation and footer. */
+  mainText?: string;
+  /** The page shows a password field. */
+  hasPasswordField?: boolean;
   error: string | null;
 };
 
+/**
+ * A page that asks the visitor to sign in instead of showing its content: a
+ * password field, a sign-in address, or a body that is little more than a
+ * "log in" prompt. Only meaningful when the run is not signed in.
+ */
+export function looksLikeSignInWall(p: PageObservation): boolean {
+  if (p.hasPasswordField) return true;
+  try {
+    if (/\/(log-?in|sign-?in|auth|customer-login)\b/i.test(new URL(p.finalUrl).pathname)) return true;
+  } catch {
+    // keep going
+  }
+  const main = (p.mainText ?? "").trim();
+  return main.length > 0 && main.length < 200 && /\b(log ?in|sign ?in)\b/i.test(main);
+}
+
 export type Assertion = { name: string; page: string; expected: string; actual: string; passed: boolean; showsDefect: boolean };
 
-export function judgeRun(repro: Reproduction, pages: PageObservation[]): { reproduced: boolean; assertions: Assertion[] } {
+export function judgeRun(
+  repro: Reproduction,
+  pages: PageObservation[],
+  options: { loggedIn?: boolean } = {},
+): { reproduced: boolean; assertions: Assertion[]; needsSignIn: string[] } {
   const assertions: Assertion[] = [];
+  const needsSignIn: string[] = [];
   for (const p of pages) {
     const page = new URL(p.url).pathname;
     if (p.error) {
       assertions.push({ name: "Page opens", page, expected: "opens", actual: p.error, passed: false, showsDefect: false });
       continue;
+    }
+    if (!options.loggedIn && looksLikeSignInWall(p)) {
+      // Not a pass and not the defect: this page could not be checked.
+      needsSignIn.push(page);
+      assertions.push({ name: "Page shows its content", page, expected: "the page's content", actual: "a sign-in prompt (needs a signed-in customer)", passed: false, showsDefect: false });
     }
     const statusOk = p.status != null && p.status < 400;
     assertions.push({ name: "Page loads without an HTTP error", page, expected: "HTTP status below 400", actual: `HTTP ${p.status ?? "none"}`, passed: statusOk, showsDefect: !statusOk });
@@ -57,5 +87,5 @@ export function judgeRun(repro: Reproduction, pages: PageObservation[]): { repro
       showsDefect: false,
     });
   }
-  return { reproduced: assertions.some((a) => a.showsDefect), assertions };
+  return { reproduced: assertions.some((a) => a.showsDefect), assertions, needsSignIn: [...new Set(needsSignIn)] };
 }

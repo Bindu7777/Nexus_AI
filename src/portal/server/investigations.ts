@@ -38,6 +38,25 @@ export type InvestigationRow = {
 type StepRow = { stage: StageId; position: number; status: string; started_at: string | null; finished_at: string | null; summary: string; detail_json: string };
 type EvidenceRow = { id: number; stage: string; source: string; ref: string; title: string; timestamp: string | null; excerpt: string; observation: "observed" | "inferred"; location_json: string | null; meta_json: string };
 
+/**
+ * JSON for a size-capped column. Cutting a JSON string mid-way leaves text that
+ * cannot be parsed, so an oversized value is replaced by a small valid marker.
+ */
+export function boundedJson(value: unknown, maxChars: number): string {
+  const text = JSON.stringify(value);
+  return text.length <= maxChars ? text : JSON.stringify({ truncated: true, originalChars: text.length });
+}
+
+/** Parse a stored JSON object; rows written before boundedJson may be cut short. */
+export function parseJsonObject(text: string | null | undefined): Record<string, unknown> {
+  try {
+    const v = JSON.parse(text || "{}");
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  } catch {
+    return { truncated: true };
+  }
+}
+
 // ---------- dependencies (replaceable in tests) ----------
 
 export type DepsFactory = (inv: InvestigationRow) => Omit<PipelineDeps, "recorder" | "isCancelled">;
@@ -145,7 +164,7 @@ async function execute(inv: InvestigationRow) {
     finish: (stage, status, summary, detail) =>
       db
         .prepare("UPDATE investigation_steps SET status = ?, finished_at = ?, started_at = COALESCE(started_at, ?), summary = ?, detail_json = ? WHERE investigation_id = ? AND stage = ?")
-        .run(status, nowIso(), nowIso(), summary.slice(0, 600), JSON.stringify(detail ?? {}).slice(0, 60_000), inv.id, stage),
+        .run(status, nowIso(), nowIso(), summary.slice(0, 600), boundedJson(detail ?? {}, 60_000), inv.id, stage),
     evidence: (stage, items) => storeEvidence(inv.id, stage, items),
   };
   const isCancelled = () => (db.prepare("SELECT cancel_requested FROM investigations WHERE id = ?").get(inv.id) as { cancel_requested: number } | undefined)?.cancel_requested === 1;
@@ -179,7 +198,7 @@ function storeEvidence(id: string, stage: string, items: EvidenceItem[]) {
     "INSERT INTO evidence_items (investigation_id, stage, source, ref, title, timestamp, excerpt, observation, location_json, meta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   for (const e of items.slice(0, 200)) {
-    ins.run(id, stage, e.source, e.ref.slice(0, 500), e.title.slice(0, 300), e.timestamp, (e.excerpt ?? "").slice(0, 1500), e.observation, e.location ? JSON.stringify(e.location) : null, JSON.stringify(e.meta ?? {}).slice(0, 4000));
+    ins.run(id, stage, e.source, e.ref.slice(0, 500), e.title.slice(0, 300), e.timestamp, (e.excerpt ?? "").slice(0, 1500), e.observation, e.location ? JSON.stringify(e.location) : null, boundedJson(e.meta ?? {}, 4000));
   }
 }
 
@@ -247,7 +266,7 @@ export function investigationView(row: InvestigationRow) {
     finishedAt: s.finished_at,
     durationMs: s.started_at && s.finished_at ? Math.max(0, Date.parse(s.finished_at) - Date.parse(s.started_at)) : null,
     summary: s.summary,
-    detail: JSON.parse(s.detail_json || "{}") as Record<string, unknown>,
+    detail: parseJsonObject(s.detail_json),
   }));
   const evidence = (db.prepare("SELECT * FROM evidence_items WHERE investigation_id = ? ORDER BY id").all(row.id) as EvidenceRow[]).map((e) => ({
     id: e.id,

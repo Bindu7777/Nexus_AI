@@ -20,6 +20,10 @@ export type ReproOutcome =
       totalRuns: number;
       reproduced: boolean;
       flaky: boolean;
+      /** Pages that needed a signed-in customer and could not be checked. */
+      needsSignIn: string[];
+      /** Not reproduced, but some pages could not be checked: no conclusion either way. */
+      inconclusive: boolean;
       blockedWrites: { method: string; url: string }[];
       blockedHosts: string[];
       summary: string;
@@ -72,17 +76,27 @@ export async function reproduceDefect(input: {
   const blockedWrites = runs.flatMap((r) => r.blocked.filter((b) => b.kind === "write")).map((b) => ({ method: b.method, url: b.url }));
   const blockedHosts = [...new Set(runs.flatMap((r) => r.blocked.filter((b) => b.kind === "host")).map((b) => { try { return new URL(b.url).hostname; } catch { return b.url; } }))];
   const errors = runs.filter((r) => r.error).length;
+  const loggedIn = runs.some((r) => r.login?.ok);
+  const needsSignIn = [...new Set(runs.flatMap((r) => r.needsSignIn ?? []))];
+  const inconclusive = reproducedRuns === 0 && errors < total && needsSignIn.length > 0;
+  const whyNoSignIn = login
+    ? `the test account ${String(c.testUsername)} could not sign in`
+    : c.testUsername
+      ? `no password is saved for the test account ${String(c.testUsername)}`
+      : "no test account is configured";
   const summary =
     reproducedRuns > 0
       ? `Reproduced in ${reproducedRuns} of ${total} runs${reproducedRuns < total ? " (flaky)" : ""}.`
       : errors === total
         ? `Every run failed to complete: ${runs[0].error}`
-        : `Not reproduced in ${total} runs.`;
+        : inconclusive
+          ? `Inconclusive: ${needsSignIn.join(", ")} showed a sign-in prompt instead of its content, because ${whyNoSignIn}. The defect did not show on the pages that could be checked, in ${total} runs.`
+          : `Not reproduced in ${total} runs.`;
   return {
     status: "ran",
     target: serviceUrl,
     mode: c.productionReadOnly ? "production-read-only" : "staging-read-only",
-    loggedIn: runs.some((r) => r.login?.ok),
+    loggedIn,
     reproduction: plan.reproduction,
     runs: runs.map(({ pages: _pages, ...rest }) => {
       void _pages;
@@ -92,6 +106,8 @@ export async function reproduceDefect(input: {
     totalRuns: total,
     reproduced: reproducedRuns > 0,
     flaky: reproducedRuns > 0 && reproducedRuns < total,
+    needsSignIn,
+    inconclusive,
     blockedWrites: blockedWrites.slice(0, 20),
     blockedHosts,
     summary,
