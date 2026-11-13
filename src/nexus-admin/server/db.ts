@@ -254,6 +254,80 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       ALTER TABLE company_users ADD COLUMN password_changed_at TEXT;
     `,
   },
+  {
+    version: 7,
+    name: "investigations: stages, evidence, approvals, feedback",
+    sql: `
+      CREATE TABLE investigations (
+        id TEXT PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES company_users(id) ON DELETE CASCADE,
+        ticket_key TEXT NOT NULL,
+        ticket_source TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued','running','done','cancelled','failed')),
+        verdict TEXT,
+        verdict_reason TEXT,
+        spec_json TEXT,
+        report_json TEXT,
+        cancel_requested INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+      );
+      CREATE INDEX investigations_company ON investigations (company_id, created_at);
+      CREATE INDEX investigations_user ON investigations (user_id, created_at);
+      CREATE INDEX investigations_ticket ON investigations (company_id, ticket_key, created_at);
+
+      -- One row per pipeline stage, so progress can be streamed and a run replayed.
+      CREATE TABLE investigation_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id TEXT NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','running','done','skipped','failed')),
+        started_at TEXT,
+        finished_at TEXT,
+        summary TEXT NOT NULL DEFAULT '',
+        detail_json TEXT NOT NULL DEFAULT '{}',
+        UNIQUE (investigation_id, stage)
+      );
+
+      -- Short excerpts only, already redacted.
+      CREATE TABLE evidence_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id TEXT NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL,
+        source TEXT NOT NULL,
+        ref TEXT NOT NULL,
+        title TEXT NOT NULL,
+        timestamp TEXT,
+        excerpt TEXT NOT NULL DEFAULT '',
+        observation TEXT NOT NULL CHECK (observation IN ('observed','inferred')),
+        location_json TEXT,
+        meta_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX evidence_items_investigation ON evidence_items (investigation_id);
+
+      CREATE TABLE approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id TEXT NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('approved','rejected')),
+        reason TEXT NOT NULL DEFAULT '',
+        diff_version TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        investigation_id TEXT NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('cause_correct','cause_wrong','fix_worked','fix_failed')),
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function dbPath() {

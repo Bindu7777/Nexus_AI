@@ -524,3 +524,37 @@ export function reencryptConnectorSecrets() {
   })();
   return n;
 }
+
+/**
+ * Active connectors of a company with their decrypted read-only contexts, for
+ * the investigation pipeline. Server-only: contexts hold secrets and must never
+ * be returned to a browser, logged or stored. secretValues lists what to scrub.
+ */
+export function companySources(companyId: number) {
+  const rows = getDb()
+    .prepare("SELECT * FROM company_connectors WHERE company_id = ? AND activated_at IS NOT NULL AND needs_secret = 0 ORDER BY id")
+    .all(companyId) as Row[];
+  const out: {
+    connectorId: number;
+    registryId: string;
+    category: string;
+    name: string;
+    status: Row["status"];
+    ctx: ConnectorContext;
+    secretValues: string[];
+    connector: Connector | null;
+  }[] = [];
+  for (const row of rows) {
+    const def = registry().get(row.registry_id);
+    if (!def || def.status !== "available") continue;
+    const { ctx, secretValues } = contextOf(row, "live");
+    let connector: Connector | null = null;
+    try {
+      connector = def.build ? def.build(ctx) : null;
+    } catch {
+      connector = null;
+    }
+    out.push({ connectorId: row.id, registryId: row.registry_id, category: row.category, name: row.label || def.displayName, status: row.status, ctx, secretValues, connector });
+  }
+  return out;
+}
