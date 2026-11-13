@@ -6,6 +6,7 @@ import { getDb, nowIso } from "./db";
 import { burnVerifyTime, hashPassword, normaliseLoginId, passwordProblems, verifyPassword } from "./passwords";
 import { ADMIN_COOKIE, completeTotp, createSession, csrfMatches, readCookie, readSession, revokeSubjectSessions, type SessionRow } from "./sessions";
 import { verifyTotp } from "./totp";
+import { DEV_SESSION_TOKEN, devBypassEnabled, devSession } from "./dev-bypass";
 
 /** Roles. Add more here; checks go through hasRole(). */
 export const ROLES = ["nexus_admin"] as const;
@@ -180,6 +181,12 @@ export function clientIp(headers: Headers) {
 
 /** Session from a raw Cookie header. Two-factor-pending sessions are not authenticated. */
 export function adminFromCookieHeader(cookieHeader: string | null | undefined, allowTotpPending = false): AdminContext | null {
+  const real = adminFromSession(cookieHeader, allowTotpPending);
+  if (real || !devBypassEnabled()) return real;
+  return devAdminContext();
+}
+
+function adminFromSession(cookieHeader: string | null | undefined, allowTotpPending: boolean): AdminContext | null {
   const token = readCookie(cookieHeader, ADMIN_COOKIE);
   const session = readSession(token, "nexus_admin");
   if (!session || !token) return null;
@@ -187,6 +194,16 @@ export function adminFromCookieHeader(cookieHeader: string | null | undefined, a
   const admin = getAdmin(session.subject_id);
   if (!admin || !hasRole(admin, ROLES)) return null;
   return { admin, session, token };
+}
+
+/** Development only: act as NEXUS_DEV_ADMIN, or the first admin. */
+function devAdminContext(): AdminContext | null {
+  const wanted = process.env.NEXUS_DEV_ADMIN;
+  const admin = wanted
+    ? findAdmin(wanted)
+    : (getDb().prepare("SELECT * FROM nexus_admins ORDER BY id LIMIT 1").get() as AdminRow | undefined);
+  if (!admin || !hasRole(admin, ROLES)) return null;
+  return { admin, session: devSession("nexus_admin", admin.id, null), token: DEV_SESSION_TOKEN };
 }
 
 function sameOrigin(request: Request) {

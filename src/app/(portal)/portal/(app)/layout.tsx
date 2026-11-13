@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { NexusMark } from "@/nexus-admin/ui/icons";
+import { devBypassEnabled } from "@/nexus-admin/server/dev-bypass";
 import { requirePortalPage } from "@/portal/server/page-guard";
 import { SignOutButton, ThemeToggle } from "@/portal/ui/auth";
 
@@ -39,6 +40,9 @@ export default async function PortalAppLayout({ children }: { children: React.Re
           <Link href="/portal/investigations">{user.role === "company_admin" ? "All investigations" : "My investigations"}</Link>
         </nav>
         <span className="p-spacer" />
+        {devBypassEnabled() ? (
+          <span className="tag tag-evidence" title="NEXUS_DEV_BYPASS_LOGIN is on. Turn it off before anyone else uses this server.">Dev sign-in bypass</span>
+        ) : null}
         <ThemeToggle />
         <span className="p-who">
           <span className="p-avatar" aria-hidden="true">{initialsOf(name)}</span>

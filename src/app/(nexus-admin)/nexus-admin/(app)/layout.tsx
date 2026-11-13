@@ -1,3 +1,4 @@
+import { devBypassEnabled } from "@/nexus-admin/server/dev-bypass";
 import { requireAdminPage } from "@/nexus-admin/server/page-guard";
 import { AdminProvider } from "@/nexus-admin/ui/client";
 import { Sidebar, Topbar } from "@/nexus-admin/ui/shell";
@@ -13,6 +14,11 @@ export default async function AdminAppLayout({ children }: { children: React.Rea
         <div className="main">
           <Topbar />
           <main className="content" id="main">
+            {devBypassEnabled() ? (
+              <p className="callout warn small" style={{ marginBottom: 16 }}>
+                Sign-in bypassed for development (NEXUS_DEV_BYPASS_LOGIN). Turn it off before anyone else uses this server.
+              </p>
+            ) : null}
             {children}
           </main>
         </div>

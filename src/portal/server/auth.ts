@@ -9,6 +9,7 @@ import { getDb, nowIso } from "@/nexus-admin/server/db";
 import { burnVerifyTime, hashPassword, passwordProblems, verifyPassword } from "@/nexus-admin/server/passwords";
 import { createSession, csrfMatches, readCookie, readSession, revokeSession, revokeSubjectSessions, type SessionRow } from "@/nexus-admin/server/sessions";
 import { ABSOLUTE_MS } from "@/nexus-admin/server/sessions";
+import { DEV_SESSION_TOKEN, devBypassEnabled, devSession } from "@/nexus-admin/server/dev-bypass";
 
 export const PORTAL_COOKIE = "nexus_portal_session";
 export const LOCK_AFTER = 5;
@@ -147,6 +148,28 @@ export async function signInEmployee(input: { companyCode: string; employeeId: s
 // ---------- sessions and guards ----------
 
 export function portalFromCookieHeader(cookieHeader: string | null | undefined): PortalContext | null {
+  const real = portalFromSession(cookieHeader);
+  if (real || !devBypassEnabled()) return real;
+  return devPortalContext();
+}
+
+/** Development only: act as NEXUS_DEV_PORTAL_USER (COMPANY/EMPLOYEE_ID), or the first live company's first employee. */
+function devPortalContext(): PortalContext | null {
+  const db = getDb();
+  const wanted = process.env.NEXUS_DEV_PORTAL_USER?.split("/");
+  const company = (wanted?.[0]
+    ? db.prepare("SELECT * FROM companies WHERE short_code = ? AND status = 'active'").get(wanted[0].trim().toUpperCase())
+    : db.prepare("SELECT * FROM companies WHERE status = 'active' ORDER BY id LIMIT 1").get()) as CompanyRow | undefined;
+  if (!company) return null;
+  const user = (wanted?.[1]
+    ? db.prepare("SELECT * FROM company_users WHERE company_id = ? AND login_id = ? AND disabled_at IS NULL").get(company.id, wanted[1].trim())
+    : db.prepare("SELECT * FROM company_users WHERE company_id = ? AND disabled_at IS NULL ORDER BY role = 'employee' DESC, id LIMIT 1").get(company.id)) as PortalUser | undefined;
+  if (!user) return null;
+  // The forced password change does not apply while the bypass is on.
+  return { user: { ...user, must_change_password: 0 }, company, session: devSession("company_user", user.id, company.id), token: DEV_SESSION_TOKEN };
+}
+
+function portalFromSession(cookieHeader: string | null | undefined): PortalContext | null {
   const token = readCookie(cookieHeader, PORTAL_COOKIE);
   const session = readSession(token, "company_user");
   if (!session || !token || !session.company_id) return null;

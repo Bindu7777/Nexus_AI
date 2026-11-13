@@ -447,3 +447,14 @@ kbd { font-family: var(--font-code); font-size: 12px; padding: 1px 6px; border-r
   .hist-row { grid-template-columns: 1fr auto; }
   .hist-row > :nth-child(3), .hist-row > :nth-child(4) { grid-column: 1 / -1; }
 }
+
+/* header fit: keep nav on one line and drop secondary bits as space runs out */
+.p-nav a { white-space: nowrap; }
+.p-top .tag { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .p-who-text { display: none; }
+}
+@media (max-width: 1020px) {
+  .p-hide-sm { display: none; }
+}
+.p-top .btn { white-space: nowrap; }
