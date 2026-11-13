@@ -151,7 +151,8 @@ function parseSections(body: string) {
       const m = line.match(head[1]);
       const rest = (m?.[1] ?? m?.[2] ?? "").trim();
       out[current] = out[current] ?? [];
-      if (rest) out[current]!.push(rest);
+      // "Steps to Reproduce (STR)": a parenthesised label after the heading is not a step.
+      if (rest && !/^\([^)]{1,20}\)$/.test(rest)) out[current]!.push(rest);
       continue;
     }
     if (/^(?:#+\s|\*\*[^*]+\*\*\s*:?\s*$)/.test(line)) {

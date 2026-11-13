@@ -7,6 +7,7 @@ import type { GitHubConnector } from "../../connectors/github";
 import { redactText, redactValue } from "../nexus-admin/server/redact";
 import { rankFindings, runDetectors, type DetectorRun, type RankedFinding } from "./detectors/registry";
 import { extractDefectSpec, type DefectSpec, type TicketFull, type TicketRead } from "./ticket";
+import type { ReproOutcome } from "./repro";
 import { VERDICTS, type DetectorContext, type Verdict } from "./types";
 
 export const STAGES = [
@@ -44,6 +45,8 @@ export type PipelineDeps = {
   sources: SourceHandle[];
   recorder: Recorder;
   isCancelled(): boolean;
+  /** Reproduces the defect on the service under test; absent when none is configured. */
+  reproduce?: (spec: DefectSpec) => Promise<ReproOutcome>;
   /** Per-source and per-stage time limits, ms. */
   sourceTimeoutMs?: number;
   stageTimeoutMs?: number;
@@ -74,6 +77,7 @@ export type InvestigationReport = {
   findings: RankedFinding[];
   detectors: Pick<DetectorRun, "detectorId" | "name" | "status" | "reason">[];
   couldNotVerify: string[];
+  reproduction: ReproOutcome | null;
   suggestedFix: null;
   validation: string;
   notDrafted: string[];
@@ -82,7 +86,12 @@ export type InvestigationReport = {
 class Cancelled extends Error {}
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
-  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${what} did not finish within ${Math.round(ms / 1000)} seconds.`)), ms))]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not finish within ${Math.round(ms / 1000)} seconds.`)), ms);
+  });
+  // Clear the timer once the work settles, so no stray timer outlives the run.
+  return Promise.race([p, limit]).finally(() => clearTimeout(timer));
 }
 
 /** Short, redacted copy of an evidence item, safe to store and show. */
@@ -121,6 +130,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
   const located: InvestigationReport["located"] = [];
   let ranked: RankedFinding[] = [];
   let detectorRuns: DetectorRun[] = [];
+  let repro: ReproOutcome | null = null;
   const checkCancel = () => {
     if (deps.isCancelled()) throw new Cancelled();
   };
@@ -162,6 +172,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
       findings: ranked,
       detectors: detectorRuns.map(({ detectorId, name, status, reason: why }) => ({ detectorId, name, status, reason: why })),
       couldNotVerify,
+      reproduction: repro,
       suggestedFix: null,
       validation: "Not validated yet.",
       notDrafted,
@@ -206,12 +217,41 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
 
     // 2. Reproduce
     r.start("reproduce");
-    const sut = deps.sources.find((s) => s.category === "services");
-    const why = sut
-      ? "Not reproduced: the reproduction runner is not built yet, so no request was sent to the service under test."
-      : "Not reproduced: no service under test with a test account is configured for this company.";
-    r.finish("reproduce", "skipped", why);
-    couldNotVerify.push(why);
+    if (!deps.reproduce) {
+      const why = "Not reproduced: no service under test is configured for this company. An admin can add the website under Connection health.";
+      r.finish("reproduce", "skipped", why);
+      couldNotVerify.push(why);
+    } else {
+      repro = await withTimeout(deps.reproduce(spec), Math.max(stageMs, 600_000), "Reproduction");
+      if (repro.status === "skipped") {
+        r.finish("reproduce", "skipped", repro.reason, { reproduction: repro });
+        couldNotVerify.push(repro.reason);
+      } else {
+        const ran = repro;
+        const items: EvidenceItem[] = ran.runs.map((run) => ({
+          source: "Reproduction",
+          kind: "sandbox",
+          ref: `repro:run:${run.index}`,
+          timestamp: new Date().toISOString(),
+          retrievedAt: new Date().toISOString(),
+          title: `Run ${run.index} on ${new URL(ran.target).hostname}: ${run.error ? `did not complete (${run.error})` : run.reproduced ? "the defect showed up" : "the defect did not show up"}`,
+          excerpt: clip(
+            run.assertions.map((a) => `${a.showsDefect ? "✗" : a.passed ? "✓" : "·"} ${a.page} · ${a.name}: expected ${a.expected}, actual ${a.actual}`).join("\n"),
+            1500,
+          ),
+          observation: "observed",
+          location: run.screenshot ? { path: run.screenshot } : undefined,
+          meta: { requestsSent: run.requestsSent, blocked: run.blocked.length, durationMs: run.durationMs },
+        }));
+        evidence.push(...items);
+        r.evidence("reproduce", items);
+        r.finish("reproduce", "done", repro.summary, { reproduction: repro });
+        if (!repro.loggedIn && repro.reproduction.steps.some((s) => s.kind === "login")) couldNotVerify.push("The test account could not sign in, so pages that need a signed-in customer were seen as a visitor.");
+        if (!repro.reproduction.steps.some((s) => s.kind === "login")) couldNotVerify.push("No test account is configured, so the reproduction ran as an anonymous visitor.");
+        if (repro.blockedHosts.length) couldNotVerify.push(`Requests to ${repro.blockedHosts.join(", ")} were blocked because those hosts are not allowed. An admin can add them under the service under test.`);
+        if (repro.blockedWrites.length) couldNotVerify.push(`${repro.blockedWrites.length} request${repro.blockedWrites.length === 1 ? "" : "s"} that would have saved data were blocked (read-only). Steps that save data cannot be reproduced here.`);
+      }
+    }
     checkCancel();
 
     // 3. Gather
@@ -308,6 +348,16 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
     const ctx: DetectorContext = {
       investigationId: ticket.key,
       evidence,
+      reproduction:
+        repro?.status === "ran"
+          ? {
+              runs: repro.totalRuns,
+              passes: repro.reproducedRuns,
+              reproduced: repro.reproduced,
+              assertions: repro.runs.flatMap((x) => x.assertions.filter((a) => a.showsDefect).map((a) => ({ name: `${a.page} · ${a.name}`, expected: a.expected, actual: a.actual, passed: a.passed }))),
+              scriptRef: "repro:plan",
+            }
+          : undefined,
       firstReportedAt: spec.firstReportedAt ?? undefined,
       located: located.filter((l) => l.startLine != null).map((l) => ({ path: l.path, startLine: l.startLine!, endLine: l.endLine ?? l.startLine!, reason: l.reason })),
     };
@@ -340,11 +390,16 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
       const tie = top.tiedWith.length ? ` It is tied with ${top.tiedWith.join(", ")}.` : "";
       return build("diagnosed", `${top.cause}.${tie} No fix has been proven yet.`);
     }
+    if (repro?.status === "ran" && !repro.reproduced) {
+      return build("not_reproduced", `${repro.summary} Static evidence is shown, with what could not be verified.`);
+    }
     const pieces = evidence.length;
     const runnable = detectorRuns.filter((d) => d.status === "ran").length;
     return build(
       "not_enough_evidence",
-      runnable
+      repro?.status === "ran" && repro.reproduced
+        ? `${repro.summary} The defect is real, but no detector names its cause yet.`
+        : runnable
         ? `Read ${pieces} piece${pieces === 1 ? "" : "s"} of evidence, but none of the ${runnable} detector${runnable === 1 ? "" : "s"} that could run found a cause.`
         : `Read ${pieces} piece${pieces === 1 ? "" : "s"} of evidence, but none of Nexus's detectors had the inputs they need for this defect, so no cause is claimed.`,
     );

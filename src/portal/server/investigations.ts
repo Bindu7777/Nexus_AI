@@ -6,7 +6,9 @@ import type { EvidenceItem } from "../../../connectors/types";
 import type { TicketConnector } from "../../../connectors/tickets/types";
 import { audit, type Actor } from "@/nexus-admin/server/audit";
 import { companySources } from "@/nexus-admin/server/connectors";
-import { getDb, nowIso } from "@/nexus-admin/server/db";
+import { dbPath, getDb, nowIso } from "@/nexus-admin/server/db";
+import path from "node:path";
+import { reproduceDefect } from "@/investigation/repro";
 import { runPipeline, STAGES, type InvestigationReport, type PipelineDeps, type SourceHandle, type StageId } from "@/investigation/pipeline";
 import { readGitHubIssueTicket, readJiraTicket, type TicketRead } from "@/investigation/ticket";
 import { VERDICTS, type Verdict } from "@/investigation/types";
@@ -63,8 +65,15 @@ export const defaultDeps: DepsFactory = (inv) => {
     if (!src?.connector) return { ok: false, reason: "unsupported", message: `No working GitHub Issues connector covers ${repo}.` };
     return readGitHubIssueTicket(src.connector as TicketConnector, inv.ticket_key);
   };
-  return { sources, readTicket };
+  const service = all.find((s) => s.registryId === "service-under-test");
+  const reproduce = service ? (spec: Parameters<typeof reproduceDefect>[0]["spec"]) => reproduceDefect({ spec, service: service.ctx, workDir: artifactDir(inv.id) }) : undefined;
+  return { sources, readTicket, reproduce };
 };
+
+/** Where a run's screenshots live: next to the admin database, never in the repository. */
+export function artifactDir(investigationId: string) {
+  return path.join(path.dirname(dbPath()), "investigations", investigationId);
+}
 
 let depsFactory: DepsFactory = defaultDeps;
 export function setDepsFactoryForTests(f: DepsFactory | null) {

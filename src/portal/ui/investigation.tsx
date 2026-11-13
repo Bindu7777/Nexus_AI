@@ -199,6 +199,8 @@ function ReportView({ view, report, csrf }: { view: InvestigationView; report: R
         </section>
       ) : null}
 
+      {report.reproduction ? <ReproductionView id={view.id} repro={report.reproduction} /> : null}
+
       {report.missingInformation.length ? null : (
       <section className="block">
         <h2>Likely causes</h2>
@@ -321,6 +323,74 @@ function Feedback({ id, csrf, given }: { id: string; csrf: string; given: string
           {err ? <p className="small" role="alert">{err}</p> : null}
         </>
       )}
+    </section>
+  );
+}
+
+function ReproductionView({ id, repro }: { id: string; repro: NonNullable<Report["reproduction"]> }) {
+  if (repro.status === "skipped") {
+    return (
+      <section className="block">
+        <h2>Reproduction</h2>
+        <p className="abstain-note"><Icon name="info" />{repro.reason}</p>
+      </section>
+    );
+  }
+  const host = new URL(repro.target).hostname;
+  return (
+    <section className="block">
+      <div className="spread">
+        <h2>Reproduction</h2>
+        <span className={`tag ${repro.reproduced ? "tag-ok" : "tag-abstain"}`}>
+          <Icon name={repro.reproduced ? "check" : "info"} />
+          {repro.reproduced ? `Reproduced ${repro.reproducedRuns}/${repro.totalRuns}` : `Not reproduced 0/${repro.totalRuns}`}
+          {repro.flaky ? " · flaky" : ""}
+        </span>
+      </div>
+      <p className="small">
+        {repro.summary} On <strong>{host}</strong> as {repro.loggedIn ? "the test account" : "an anonymous visitor"} ·{" "}
+        <span className="tag tag-neutral">{repro.mode === "production-read-only" ? "Production · read-only" : "Read-only"}</span>
+      </p>
+      <details className="repro-basis">
+        <summary className="small">How the steps were chosen ({repro.reproduction.basis.length})</summary>
+        <ul className="gaps">{repro.reproduction.basis.map((b, i) => <li key={i}>{b}</li>)}</ul>
+      </details>
+      <div className="repro-runs">
+        {repro.runs.map((run) => (
+          <div key={run.index} className={`repro-run ${run.reproduced ? "hit" : ""}`}>
+            <div className="spread">
+              <strong>Run {run.index}</strong>
+              <span className="muted small">
+                {run.error ? `Did not complete: ${run.error}` : run.reproduced ? "Defect showed up" : "Defect did not show up"} · {dur(run.durationMs)} · {run.requestsSent} requests
+              </span>
+            </div>
+            {run.login ? <p className="muted small">{run.login.message}</p> : null}
+            <table className="checks">
+              <thead><tr><th>Page</th><th>Check</th><th>Expected</th><th>Actual</th></tr></thead>
+              <tbody>
+                {run.assertions.map((a, i) => (
+                  <tr key={i} className={a.showsDefect ? "defect" : a.passed ? "ok" : ""}>
+                    <td className="mono">{a.page}</td>
+                    <td>{a.showsDefect ? "✗ " : a.passed ? "✓ " : "· "}{a.name}</td>
+                    <td>{a.expected}</td>
+                    <td>{a.actual}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {run.screenshot ? (
+              <a href={`/api/investigations/${id}/artifacts/${run.screenshot}`} target="_blank" rel="noopener noreferrer" className="shot">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/investigations/${id}/artifacts/${run.screenshot}`} alt={`What the page showed at the end of run ${run.index}`} loading="lazy" />
+              </a>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {repro.blockedWrites.length ? (
+        <p className="muted small"><Icon name="info" className="i16" /> Blocked {repro.blockedWrites.length} request{repro.blockedWrites.length === 1 ? "" : "s"} that would have saved data, for example {repro.blockedWrites[0].method} {new URL(repro.blockedWrites[0].url).pathname}.</p>
+      ) : null}
+      {repro.blockedHosts.length ? <p className="muted small"><Icon name="info" className="i16" /> Blocked hosts not on the allow list: {repro.blockedHosts.join(", ")}.</p> : null}
     </section>
   );
 }

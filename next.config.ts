@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   // has to be listed or HMR and dev stack-frame requests from that origin are blocked.
   // Do not use a wildcard.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  // Playwright drives a real browser for reproductions; it must run from node_modules, not be bundled.
+  serverExternalPackages: ["playwright", "playwright-core"],
 };
 
 export default nextConfig;

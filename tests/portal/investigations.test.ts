@@ -334,6 +334,9 @@ test("DefectSpec rules: sections, plain numbered lists and sentences; missing pa
   const vague = extractDefectSpec({ ...GOOD_TICKET, description: "It is broken.", comments: [] });
   assert.equal(vague.ok, false);
   assert.equal(vague.ok ? 0 : vague.missing.length, 4);
+  const str = extractDefectSpec({ ...GOOD_TICKET, description: "Steps to Reproduce (STR)\nOpen the page\nPress Pay\nExpected Result\nIt works.\nActual Result\nIt fails." });
+  assert.ok(str.ok);
+  assert.deepEqual(str.ok && str.spec.steps, ["Open the page", "Press Pay"], "the (STR) label is not a step");
   const full = extractDefectSpec(GOOD_TICKET);
   assert.ok(full.ok && full.spec.searchTerms.includes("payment"));
   assert.ok(full.ok && full.spec.window?.from === "2026-11-09T10:00:00.000Z");

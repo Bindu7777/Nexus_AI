@@ -304,7 +304,11 @@ function contextOf(row: Row, which: "live" | "pending"): { ctx: ConnectorContext
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`The test did not finish within ${ms / 1000} seconds.`)), ms))]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`The test did not finish within ${ms / 1000} seconds.`)), ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
 }
 
 /** Run a definition's read-only test. Exported for the contract tests. */
