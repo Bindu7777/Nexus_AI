@@ -17,8 +17,8 @@ export type ReadOnlyHttp = {
   getTextCapped(
     url: string,
     headers?: Record<string, string>,
-    limits?: { maxMs?: number; maxBytes?: number },
-  ): Promise<{ status: number; text: string; truncated: boolean }>;
+    limits?: { maxMs?: number; maxBytes?: number; signal?: AbortSignal },
+  ): Promise<{ status: number; text: string; truncated: boolean; noResponse?: boolean }>;
 };
 
 export function assertReadOnlyRequest(init: RequestInit | undefined) {
@@ -90,12 +90,25 @@ export function createReadOnlyHttp(options: {
       const controller = new AbortController();
       const init: RequestInit = { method: "GET", headers: { ...options.baseHeaders, ...headers }, signal: controller.signal };
       assertReadOnlyRequest(init);
-      const timer = setTimeout(() => controller.abort(), maxMs);
+      // Our own stop: the time cap, or the caller's signal (for example, a reproduction finished).
+      let stoppedByUs = false;
+      const stop = () => {
+        stoppedByUs = true;
+        controller.abort();
+      };
+      const timer = setTimeout(stop, maxMs);
+      const external = limits.signal;
+      if (external?.aborted) stop();
+      external?.addEventListener("abort", stop, { once: true });
       let response: Response;
       try {
         response = await fetchImpl(url, init);
       } catch (error) {
         clearTimeout(timer);
+        external?.removeEventListener("abort", stop);
+        // A live stream may send no headers until something happens. Stopping it
+        // ourselves is not a failure: it means nothing arrived in the window.
+        if (stoppedByUs) return { status: 0, text: "", truncated: true, noResponse: true };
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(redact(`GET ${url} failed: ${detail}`, secrets));
       }
@@ -104,7 +117,7 @@ export function createReadOnlyHttp(options: {
       let truncated = false;
       try {
         const reader = response.body?.getReader();
-        while (reader) {
+        while (reader && !stoppedByUs) {
           const { done, value } = await reader.read();
           if (done) break;
           chunks.push(value);
@@ -119,6 +132,7 @@ export function createReadOnlyHttp(options: {
         truncated = true; // stopped by the time cap
       } finally {
         clearTimeout(timer);
+        external?.removeEventListener("abort", stop);
       }
       return { status: response.status, text: Buffer.concat(chunks).toString("utf8"), truncated };
     },

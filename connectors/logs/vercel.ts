@@ -1,6 +1,7 @@
 // Vercel logs through the Vercel REST API, GET only: the listed projects,
 // their recent deployments, and each deployment's runtime logs.
-// Status: written against Vercel's documented API, not yet run against a live account.
+// Runtime logs are a live stream: reads are bounded in time, and tail() watches
+// production while a reproduction runs.
 import { createReadOnlyHttp, type FetchLike, redact } from "../http";
 import { clip, type Connector, type EvidenceItem, emptyTestResult, nowIso, type SearchQuery } from "../types";
 
@@ -11,6 +12,8 @@ export type VercelLogsConfig = {
   projects: string[];
   /** How many recent deployments per project to read logs from. */
   deploymentsPerProject?: number;
+  /** How long one read of a deployment's log stream may stay open, ms. */
+  streamMs?: number;
   apiBase?: string;
   fetchImpl?: FetchLike;
 };
@@ -43,7 +46,16 @@ export function parseLogLines(text: string): VLogLine[] {
   return out;
 }
 
-export function createVercelLogsConnector(config: VercelLogsConfig): Connector {
+/** Live server logs, watched while something else (a reproduction) runs. */
+export type LiveLogTail = {
+  tail(options: { maxMs: number; signal?: AbortSignal; since?: number }): Promise<EvidenceItem[]>;
+};
+
+export function hasLiveTail(c: unknown): c is LiveLogTail {
+  return !!c && typeof (c as Partial<LiveLogTail>).tail === "function";
+}
+
+export function createVercelLogsConnector(config: VercelLogsConfig): Connector & LiveLogTail {
   const apiBase = (config.apiBase ?? "https://api.vercel.com").replace(/\/$/, "");
   const http = createReadOnlyHttp({
     fetchImpl: config.fetchImpl,
@@ -78,12 +90,33 @@ export function createVercelLogsConnector(config: VercelLogsConfig): Connector {
     return data.deployments ?? [];
   }
 
-  async function runtimeLogs(p: VProject, d: VDeployment) {
-    const r = await http.getTextCapped(q(`/v1/projects/${encodeURIComponent(p.id)}/deployments/${encodeURIComponent(d.uid)}/runtime-logs`), {
-      accept: "application/stream+json",
-    });
+  // Vercel's runtime-logs endpoint is a stream that stays open. Read it once per
+  // deployment for a short window and reuse the lines for every search term.
+  async function streamLogs(p: VProject, d: VDeployment, limits: { maxMs: number; signal?: AbortSignal }) {
+    const r = await http.getTextCapped(
+      q(`/v1/projects/${encodeURIComponent(p.id)}/deployments/${encodeURIComponent(d.uid)}/runtime-logs`),
+      { accept: "application/stream+json" },
+      limits,
+    );
+    if (r.noResponse) return [];
     if (r.status >= 400) throw new Error(clean(`Vercel runtime logs returned HTTP ${r.status}.`));
     return parseLogLines(r.text);
+  }
+  const logCache = new Map<string, Promise<VLogLine[]>>();
+  function runtimeLogs(p: VProject, d: VDeployment) {
+    if (!logCache.has(d.uid)) {
+      const read = streamLogs(p, d, { maxMs: config.streamMs ?? 4000 });
+      read.catch(() => logCache.delete(d.uid));
+      logCache.set(d.uid, read);
+    }
+    return logCache.get(d.uid)!;
+  }
+
+  /** The deployment that serves production now: newest READY production deployment. */
+  async function liveDeployment(p: VProject) {
+    const recent = await deployments(p, 10);
+    const ready = recent.filter((d) => (d.readyState ?? d.state) === "READY");
+    return ready.find((d) => d.target === "production") ?? ready[0] ?? null;
   }
 
   function item(p: VProject, d: VDeployment, l: VLogLine, retrievedAt: string): EvidenceItem {
@@ -99,7 +132,15 @@ export function createVercelLogsConnector(config: VercelLogsConfig): Connector {
       excerpt: clip(l.message ?? "", 4000),
       observation: "observed",
       location: d.url ? { url: `https://${d.url}` } : undefined,
-      meta: { deployment: d.uid, target: d.target ?? null, source: l.source ?? null, level: l.level ?? null, status: l.responseStatusCode ?? null },
+      meta: {
+        deployment: d.uid,
+        target: d.target ?? null,
+        source: l.source ?? null,
+        level: l.level ?? null,
+        status: l.responseStatusCode ?? null,
+        method: l.requestMethod ?? null,
+        path: l.requestPath ?? null,
+      },
     };
   }
 
@@ -108,7 +149,28 @@ export function createVercelLogsConnector(config: VercelLogsConfig): Connector {
     kind: "logs",
     readOnly: true,
     implemented: true,
-    description: `Vercel runtime logs for ${config.projects.join(", ")}, read with GET only. Not yet run against a live account.`,
+    description: `Vercel runtime logs for ${config.projects.join(", ")}, read with GET only.`,
+    async tail({ maxMs, signal, since }) {
+      // Watch each project's live production deployment at the same time, until
+      // maxMs passes or the caller stops it. Lines older than `since` are dropped.
+      const started = since ?? Date.now();
+      const retrievedAt = nowIso();
+      const perProject = await Promise.all(
+        config.projects.map(async (name) => {
+          const p = await project(name);
+          const d = await liveDeployment(p);
+          if (!d) return [];
+          const lines = await streamLogs(p, d, { maxMs, signal });
+          return lines
+            .filter((l) => typeof l.timestampInMs !== "number" || l.timestampInMs >= started - 5000)
+            .map((l) => {
+              const it = item(p, d, l, retrievedAt);
+              return { ...it, meta: { ...it.meta, live: true } };
+            });
+        }),
+      );
+      return perProject.flat().slice(0, 200);
+    },
     async test() {
       const result = emptyTestResult();
       if (!config.token) {

@@ -9,6 +9,7 @@ import { companySources } from "@/nexus-admin/server/connectors";
 import { dbPath, getDb, nowIso } from "@/nexus-admin/server/db";
 import path from "node:path";
 import { reproduceDefect } from "@/investigation/repro";
+import { hasLiveTail, type LiveLogTail } from "../../../connectors/logs/vercel";
 import { runPipeline, STAGES, type InvestigationReport, type PipelineDeps, type SourceHandle, type StageId } from "@/investigation/pipeline";
 import { readGitHubIssueTicket, readJiraTicket, type TicketRead } from "@/investigation/ticket";
 import { VERDICTS, type Verdict } from "@/investigation/types";
@@ -67,7 +68,13 @@ export const defaultDeps: DepsFactory = (inv) => {
   };
   const service = all.find((s) => s.registryId === "service-under-test");
   const reproduce = service ? (spec: Parameters<typeof reproduceDefect>[0]["spec"]) => reproduceDefect({ spec, service: service.ctx, workDir: artifactDir(inv.id) }) : undefined;
-  return { sources, readTicket, reproduce };
+  // Live server logs: Vercel connectors with "watch live logs" on (the default).
+  const liveLogs = reproduce
+    ? all
+        .filter((s) => s.registryId === "vercel-logs" && s.ctx.config.liveTail !== false && hasLiveTail(s.connector))
+        .map((s) => ({ name: s.name, secretValues: s.secretValues, tail: (s.connector as unknown as LiveLogTail).tail }))
+    : [];
+  return { sources, readTicket, reproduce, liveLogs };
 };
 
 /** Where a run's screenshots live: next to the admin database, never in the repository. */

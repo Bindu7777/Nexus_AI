@@ -278,3 +278,120 @@ test("pipeline: not reproduced gives Not reproduced; reproduced says so without 
   const none = await runWith(undefined);
   assert.equal(none.steps.reproduce, "skipped");
 });
+
+// ---------- live server logs ----------
+
+test("live logs: a log stream that sends nothing is empty, not a failure", async () => {
+  const { createReadOnlyHttp } = await import("../../connectors/http.ts");
+  // A fetch that never answers until aborted, like Vercel's runtime-logs stream with no traffic.
+  const hang = (_url: string, init?: RequestInit) =>
+    new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("This operation was aborted"))));
+  const httpc = createReadOnlyHttp({ fetchImpl: hang });
+  const capped = await httpc.getTextCapped("https://api.vercel.com/x", {}, { maxMs: 50 });
+  assert.equal(capped.noResponse, true);
+  assert.equal(capped.text, "");
+  const stopper = new AbortController();
+  const pending = httpc.getTextCapped("https://api.vercel.com/x", {}, { maxMs: 60_000, signal: stopper.signal });
+  stopper.abort();
+  assert.equal((await pending).noResponse, true);
+  // A real network failure still fails.
+  const broken = createReadOnlyHttp({ fetchImpl: async () => { throw new Error("ECONNREFUSED"); } });
+  await assert.rejects(broken.getTextCapped("https://api.vercel.com/x", {}, { maxMs: 1000 }), /ECONNREFUSED/);
+});
+
+function fakeVercel(stream: (signal: AbortSignal) => Response) {
+  const calls: string[] = [];
+  const fetchImpl = async (url: string, init?: RequestInit) => {
+    assert.equal((init?.method ?? "GET").toUpperCase(), "GET");
+    calls.push(new URL(url).pathname);
+    const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+    if (url.includes("/v9/projects/")) return json({ id: "prj_1", name: "happy-moments" });
+    if (url.includes("/v6/deployments"))
+      return json({ deployments: [{ uid: "dpl_old", readyState: "READY", target: null }, { uid: "dpl_prod", readyState: "READY", target: "production" }] });
+    if (url.includes("/runtime-logs")) return stream(init!.signal!);
+    throw new Error(`unexpected ${url}`);
+  };
+  return { calls, fetchImpl };
+}
+
+test("live logs: Vercel tail watches the production deployment until stopped and keeps the lines", async () => {
+  const { createVercelLogsConnector } = await import("../../connectors/logs/vercel.ts");
+  const now = Date.now();
+  const { calls, fetchImpl } = fakeVercel((signal) => {
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        ctrl.enqueue(enc.encode(JSON.stringify({ rowId: "old", timestampInMs: now - 60_000, message: "before the run" }) + "\n"));
+        ctrl.enqueue(enc.encode(JSON.stringify({ rowId: "a", timestampInMs: now + 10, level: "info", requestMethod: "GET", requestPath: "/liked-vendors", responseStatusCode: 200, message: "<!doctype html>" }) + "\n"));
+        ctrl.enqueue(enc.encode(JSON.stringify({ rowId: "b", timestampInMs: now + 20, level: "error", requestMethod: "GET", requestPath: "/api/wishlist", responseStatusCode: 500, message: "boom" }) + "\n"));
+        signal.addEventListener("abort", () => ctrl.error(new Error("aborted")));
+      },
+    });
+    return new Response(body, { status: 200 });
+  });
+  const c = createVercelLogsConnector({ token: "tok_secret_1234", projects: ["happy-moments"], fetchImpl });
+  const stopper = new AbortController();
+  const pending = c.tail({ maxMs: 60_000, signal: stopper.signal, since: now });
+  await new Promise((r) => setTimeout(r, 50));
+  stopper.abort();
+  const lines = await pending;
+  assert.deepEqual(lines.map((l) => l.meta?.path), ["/liked-vendors", "/api/wishlist"]);
+  assert.equal(lines[1].meta?.status, 500);
+  assert.equal(lines[0].meta?.live, true);
+  assert.ok(calls.some((p) => p.includes("/deployments/dpl_prod/runtime-logs")), "tails the production deployment");
+});
+
+test("live logs: Vercel search reads each deployment's stream once, however many terms", async () => {
+  const { createVercelLogsConnector } = await import("../../connectors/logs/vercel.ts");
+  const { calls, fetchImpl } = fakeVercel(() => new Response(JSON.stringify({ rowId: "x", message: "GET /liked-vendors" }) + "\n", { status: 200 }));
+  const c = createVercelLogsConnector({ token: "tok_secret_1234", projects: ["happy-moments"], deploymentsPerProject: 2, fetchImpl });
+  assert.equal((await c.search({ text: "/liked-vendors" })).length, 2);
+  assert.equal((await c.search({ text: "nothing" })).length, 0);
+  assert.equal(calls.filter((p) => p.includes("runtime-logs")).length, 2);
+});
+
+test("pipeline: live server logs are watched during the reproduction and land in the report", async () => {
+  let watching = false;
+  let stoppedAfterRepro = false;
+  const steps: Record<string, string> = {};
+  const evidence: string[] = [];
+  const res = await runPipeline({
+    readTicket: async () => ({ ok: true, ticket: { ...TICKET, description: "Steps to reproduce:\n1. Open /liked-vendors\nExpected: the list shows.\nActual: \"Network error: Unexpected token\" is shown." } }),
+    sources: [],
+    liveLogGraceMs: 10,
+    liveLogs: [
+      {
+        name: "Happy Moments Vercel",
+        secretValues: ["tok_secret_1234"],
+        tail: ({ signal }) =>
+          new Promise((resolve) => {
+            watching = true;
+            signal?.addEventListener("abort", () => resolve([
+              { source: "vercel-logs", kind: "logs", ref: "log:vercel:hm:dpl:1", timestamp: null, retrievedAt: "", title: "GET /api/wishlist → 500", excerpt: "failed with tok_secret_1234", observation: "observed", meta: { status: 500, live: true } },
+            ]));
+          }),
+      },
+    ],
+    reproduce: async () => {
+      assert.equal(watching, true, "logs are watched before the browser starts");
+      stoppedAfterRepro = true;
+      return {
+        status: "ran" as const, target: "https://happymomentsindia.com", mode: "production-read-only" as const, loggedIn: false,
+        reproduction: { target: "https://happymomentsindia.com", steps: [{ kind: "visit" as const, url: "https://happymomentsindia.com/liked-vendors", fromStep: "x" }], symptomTexts: [], checkHtmlForData: true, basis: [] },
+        runs: [], reproducedRuns: 3, totalRuns: 3, reproduced: true, flaky: false, blockedWrites: [], blockedHosts: [], summary: "Reproduced in 3 of 3 runs.",
+      };
+    },
+    isCancelled: () => false,
+    recorder: { start: () => undefined, finish: (s, st) => void (steps[s] = st), evidence: (_s, items) => void evidence.push(...items.map((i) => `${i.title} ${i.excerpt}`)) },
+  });
+  assert.equal(stoppedAfterRepro, true);
+  assert.deepEqual(res.report.liveLogs, [{ source: "Happy Moments Vercel", status: "ok", lines: 1, serverErrors: 1, message: "1 server log line while the reproduction ran, 1 of them errors." }]);
+  const line = evidence.find((e) => e.includes("/api/wishlist"));
+  assert.ok(line);
+  assert.ok(!line.includes("tok_secret_1234"), "secrets are redacted");
+});
+
+test("pipeline: step paths are pulled from URLs and bare paths", async () => {
+  const { stepPaths } = await import("../../src/investigation/pipeline.ts");
+  assert.deepEqual(stepPaths(spec.steps), ["/category/venues", "/liked-vendors", "/page"]);
+});

@@ -32,6 +32,15 @@ export type SourceHandle = {
   secretValues: string[];
 };
 
+export type LiveLogSource = {
+  name: string;
+  secretValues: string[];
+  tail(options: { maxMs: number; signal?: AbortSignal; since?: number }): Promise<EvidenceItem[]>;
+};
+
+/** What the live server logs showed while the reproduction ran. */
+export type LiveLogLine = { source: string; status: "ok" | "failed"; lines: number; serverErrors: number; message: string };
+
 export type SourceLine = { name: string; category: string; status: "ok" | "empty" | "failed" | "skipped"; count: number; message: string };
 
 export type Recorder = {
@@ -47,6 +56,10 @@ export type PipelineDeps = {
   isCancelled(): boolean;
   /** Reproduces the defect on the service under test; absent when none is configured. */
   reproduce?: (spec: DefectSpec) => Promise<ReproOutcome>;
+  /** Live server log streams watched while the reproduction runs (for example, Vercel). */
+  liveLogs?: LiveLogSource[];
+  /** How long to keep watching after the reproduction ends, so late lines arrive. */
+  liveLogGraceMs?: number;
   /** Per-source and per-stage time limits, ms. */
   sourceTimeoutMs?: number;
   stageTimeoutMs?: number;
@@ -78,6 +91,7 @@ export type InvestigationReport = {
   detectors: Pick<DetectorRun, "detectorId" | "name" | "status" | "reason">[];
   couldNotVerify: string[];
   reproduction: ReproOutcome | null;
+  liveLogs: LiveLogLine[];
   suggestedFix: null;
   validation: string;
   notDrafted: string[];
@@ -102,6 +116,23 @@ export function sanitizeEvidence(item: EvidenceItem, secrets: string[]): Evidenc
     excerpt: redactText(clip(item.excerpt ?? "", 1500), secrets),
     meta: item.meta ? (redactValue(item.meta, secrets) as Record<string, unknown>) : undefined,
   };
+}
+
+/** Page paths named in the steps: URL paths and bare paths such as /liked-vendors. */
+export function stepPaths(steps: string[]): string[] {
+  const out = new Set<string>();
+  for (const step of steps) {
+    for (const m of step.matchAll(/https?:\/\/[^\s)"']+/g)) {
+      try {
+        const p = new URL(m[0].replace(/[.,;]+$/, "")).pathname;
+        if (p && p !== "/") out.add(p);
+      } catch {
+        // not a URL
+      }
+    }
+    for (const m of step.matchAll(/(?:^|[\s(])(\/[a-z][\w\-/]*)/gi)) out.add(m[1].replace(/\/+$/, ""));
+  }
+  return [...out];
 }
 
 const CATEGORY_TITLE: Record<string, string> = { code: "Code", database: "Database", logs: "Logs", docs: "Documentation", tests: "Tests", design: "Design", services: "Service under test", defects: "Defects" };
@@ -131,6 +162,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
   let ranked: RankedFinding[] = [];
   let detectorRuns: DetectorRun[] = [];
   let repro: ReproOutcome | null = null;
+  const liveLogLines: LiveLogLine[] = [];
   const checkCancel = () => {
     if (deps.isCancelled()) throw new Cancelled();
   };
@@ -173,6 +205,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
       detectors: detectorRuns.map(({ detectorId, name, status, reason: why }) => ({ detectorId, name, status, reason: why })),
       couldNotVerify,
       reproduction: repro,
+      liveLogs: liveLogLines,
       suggestedFix: null,
       validation: "Not validated yet.",
       notDrafted,
@@ -222,7 +255,49 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
       r.finish("reproduce", "skipped", why);
       couldNotVerify.push(why);
     } else {
-      repro = await withTimeout(deps.reproduce(spec), Math.max(stageMs, 600_000), "Reproduction");
+      // Watch the live server logs for the whole reproduction, then a little longer.
+      const watchers = (deps.liveLogs ?? []).map((src) => {
+        const stopper = new AbortController();
+        const lines = src.tail({ maxMs: 15 * 60_000, signal: stopper.signal, since: Date.now() });
+        lines.catch(() => undefined);
+        return { src, stopper, lines };
+      });
+      const stopWatching = async (): Promise<EvidenceItem[]> => {
+        if (!watchers.length) return [];
+        await new Promise((res) => setTimeout(res, deps.liveLogGraceMs ?? 3000));
+        const out: EvidenceItem[] = [];
+        for (const w of watchers) {
+          w.stopper.abort();
+          try {
+            const got = (await withTimeout(w.lines, 15_000, `${w.src.name} live logs`)).map((e) => sanitizeEvidence({ ...e, source: w.src.name }, w.src.secretValues));
+            const serverErrors = got.filter((e) => Number(e.meta?.status) >= 500 || e.meta?.level === "error").length;
+            liveLogLines.push({
+              source: w.src.name,
+              status: "ok",
+              lines: got.length,
+              serverErrors,
+              message: got.length
+                ? `${got.length} server log line${got.length === 1 ? "" : "s"} while the reproduction ran${serverErrors ? `, ${serverErrors} of them errors` : ", no server errors"}.`
+                : "No server log lines arrived while the reproduction ran. The pages may be served as static files that write no runtime logs.",
+            });
+            out.push(...got);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            liveLogLines.push({ source: w.src.name, status: "failed", lines: 0, serverErrors: 0, message: redactText(message, w.src.secretValues) });
+            couldNotVerify.push(`${w.src.name}: live server logs could not be read during the reproduction.`);
+          }
+        }
+        return out;
+      };
+      try {
+        repro = await withTimeout(deps.reproduce(spec), Math.max(stageMs, 600_000), "Reproduction");
+      } finally {
+        const live = repro?.status === "ran" ? await stopWatching() : (watchers.forEach((w) => w.stopper.abort()), []);
+        if (live.length) {
+          evidence.push(...live);
+          r.evidence("reproduce", live);
+        }
+      }
       if (repro.status === "skipped") {
         r.finish("reproduce", "skipped", repro.reason, { reproduction: repro });
         couldNotVerify.push(repro.reason);
@@ -245,7 +320,7 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
         }));
         evidence.push(...items);
         r.evidence("reproduce", items);
-        r.finish("reproduce", "done", repro.summary, { reproduction: repro });
+        r.finish("reproduce", "done", repro.summary, { reproduction: repro, liveLogs: liveLogLines });
         if (!repro.loggedIn && repro.reproduction.steps.some((s) => s.kind === "login")) couldNotVerify.push("The test account could not sign in, so pages that need a signed-in customer were seen as a visitor.");
         if (!repro.reproduction.steps.some((s) => s.kind === "login")) couldNotVerify.push("No test account is configured, so the reproduction ran as an anonymous visitor.");
         if (repro.blockedHosts.length) couldNotVerify.push(`Requests to ${repro.blockedHosts.join(", ")} were blocked because those hosts are not allowed. An admin can add them under the service under test.`);
@@ -277,7 +352,11 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
           }
         }
       } else if (s.category === "logs") {
-        for (const t of [...spec!.errorMessages.slice(0, 2), ...terms.slice(0, 2)]) found.push(...(await c.search({ text: t, since: fromIso, limit: 10 })));
+        // Server logs record request paths, not the browser's error text, so also
+        // look for the pages the ticket's steps name.
+        for (const t of [...spec!.errorMessages.slice(0, 2), ...stepPaths(spec!.steps).slice(0, 3), ...terms.slice(0, 2)]) {
+          found.push(...(await c.search({ text: t, since: fromIso, limit: 10 })));
+        }
       } else {
         for (const t of terms.slice(0, 3)) found.push(...(await c.search({ text: t, limit: 5 })));
       }

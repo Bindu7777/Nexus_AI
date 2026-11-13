@@ -200,6 +200,19 @@ function ReportView({ view, report, csrf }: { view: InvestigationView; report: R
       ) : null}
 
       {report.reproduction ? <ReproductionView id={view.id} repro={report.reproduction} /> : null}
+      {report.liveLogs?.length ? (
+        <section className="block">
+          <h2>Live server logs during the reproduction</h2>
+          <ul className="leads">
+            {report.liveLogs.map((l) => (
+              <li key={l.source}>
+                <span className={`tag ${l.status === "failed" ? "tag-abstain" : l.serverErrors ? "tag-abstain" : "tag-neutral"}`}>{l.source}</span> {l.message}
+              </li>
+            ))}
+          </ul>
+          <p className="muted small"><span className="tag tag-neutral">Observed</span> The lines themselves are listed under evidence, from the Reproduce stage.</p>
+        </section>
+      ) : null}
 
       {report.missingInformation.length ? null : (
       <section className="block">

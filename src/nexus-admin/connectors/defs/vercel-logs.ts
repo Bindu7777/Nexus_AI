@@ -8,6 +8,7 @@ const connector = (ctx: ConnectorContext) =>
     teamId: String(ctx.config.teamId ?? "") || undefined,
     projects: asList(ctx.scope.projects),
     deploymentsPerProject: Number(ctx.config.deployments || 3),
+    streamMs: 4000,
     fetchImpl: ctx.fetchImpl,
   });
 
@@ -15,7 +16,8 @@ export default defineConnector({
   id: "vercel-logs",
   category: "logs",
   displayName: "Vercel logs",
-  description: "Runtime logs from the recent deployments of the listed Vercel projects. Not yet run against a live account.",
+  description:
+    "Runtime logs from the listed Vercel projects: recent deployments when gathering evidence, and the live production stream while Nexus reproduces a defect.",
   status: "available",
   tier: "now",
   deployments: ["cloud"],
@@ -36,6 +38,13 @@ export default defineConnector({
       validate: (v) => (!v || /^team_[A-Za-z0-9]{6,}$/.test(String(v)) ? null : "A Team ID starts with team_."),
     },
     { name: "deployments", label: "Recent deployments to read per project", type: "number", defaultValue: 3, min: 1, max: 10 },
+    {
+      name: "liveTail",
+      label: "Watch live server logs while Nexus reproduces a defect",
+      type: "checkbox",
+      defaultValue: true,
+      help: "While the reproduction browser runs, Nexus keeps the production deployment's log stream open (GET only) and attaches the server lines it sees to the report.",
+    },
   ],
   scopeFields: [
     {
@@ -48,7 +57,7 @@ export default defineConnector({
       validate: (v) => (asList(v).every((p) => /^[A-Za-z0-9._-]{1,100}$/.test(p)) ? null : "Use the project name or ID as shown in Vercel."),
     },
   ],
-  capabilities: { readOnly: true, reads: ["runtime logs", "deployments"], transport: "http" },
+  capabilities: { readOnly: true, reads: ["runtime logs", "live runtime logs", "deployments"], transport: "http" },
   targets: () => [{ url: "https://api.vercel.com" }],
   test: (ctx) => connector(ctx).test(),
   build: connector,
