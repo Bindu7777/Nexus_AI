@@ -11,12 +11,33 @@ export type ReproPolicy = {
   readOnly: boolean;
   /** During sign-in only, these paths may receive a POST. */
   loginAuthPaths: string[];
+  /**
+   * The only saves an admin allowed, by exact method, host and path. They pass
+   * only after the test account has signed in, and at most maxAllowedWrites per run.
+   */
+  allowedWrites: AllowedWrite[];
+  maxAllowedWrites: number;
   maxTotal: number;
   maxRps: number;
 };
 
-export type RequestInfo = { method: string; url: string; phase: "login" | "run" };
-export type Decision = { allow: true } | { allow: false; reason: string; kind: "host" | "write" | "cap" | "scheme" };
+export type AllowedWrite = { method: string; host: string; path: string };
+export type RequestInfo = { method: string; url: string; phase: "login" | "run"; signedIn?: boolean };
+export type Decision = { allow: true; allowedWrite?: AllowedWrite } | { allow: false; reason: string; kind: "host" | "write" | "cap" | "scheme" };
+
+const WRITE_ENTRY = /^(POST|PUT|PATCH|DELETE)\s+(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,}(?::\d+)?)(\/[^\s?#*]*)$/i;
+
+/** Parse "POST api.example.com/api/likes" entries. Returns the parsed list and any lines that are not valid. */
+export function parseAllowedWrites(lines: string[]): { writes: AllowedWrite[]; invalid: string[] } {
+  const writes: AllowedWrite[] = [];
+  const invalid: string[] = [];
+  for (const raw of lines.map((l) => l.trim()).filter(Boolean)) {
+    const m = raw.match(WRITE_ENTRY);
+    if (!m) invalid.push(raw);
+    else writes.push({ method: m[1].toUpperCase(), host: m[2].toLowerCase().replace(/:\d+$/, ""), path: m[3].replace(/\/+$/, "") || "/" });
+  }
+  return { writes, invalid };
+}
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -36,15 +57,26 @@ export function targetRefusal(config: { serviceUrl: string; environmentName: str
   return null;
 }
 
-export function makePolicy(input: { serviceUrl: string; extraHosts: string[]; loginAuthPaths: string[]; maxTotal: number; maxRps: number; productionReadOnly: boolean }): ReproPolicy {
+export function makePolicy(input: {
+  serviceUrl: string;
+  extraHosts: string[];
+  loginAuthPaths: string[];
+  maxTotal: number;
+  maxRps: number;
+  productionReadOnly: boolean;
+  allowedWrites?: AllowedWrite[];
+  maxAllowedWrites?: number;
+}): ReproPolicy {
   const host = hostOf(input.serviceUrl);
   return {
     origin: new URL(input.serviceUrl).origin,
     allowedHosts: [...new Set([host, ...input.extraHosts.map((h) => h.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter(Boolean)])],
-    // Writes are only ever allowed on a non-production site with explicit test-data permission,
-    // which this build does not offer yet: every reproduction is read-only.
+    // Read-only always. The only exceptions are the sign-in request and the exact
+    // saves an admin listed and confirmed, for the signed-in test account.
     readOnly: true,
     loginAuthPaths: input.loginAuthPaths.map((p) => p.trim()).filter((p) => p.startsWith("/")),
+    allowedWrites: input.allowedWrites ?? [],
+    maxAllowedWrites: Math.max(0, Math.min(input.maxAllowedWrites ?? 3, 10)),
     maxTotal: Math.max(1, Math.min(input.maxTotal, 1000)),
     maxRps: Math.max(1, Math.min(input.maxRps, 20)),
   };
@@ -54,7 +86,7 @@ export function makePolicy(input: { serviceUrl: string; extraHosts: string[]; lo
  * Decide one request. `sent` is how many requests were already allowed in this run.
  * data: and blob: URLs never leave the browser and are always allowed.
  */
-export function decideRequest(policy: ReproPolicy, req: RequestInfo, sent: number): Decision {
+export function decideRequest(policy: ReproPolicy, req: RequestInfo, sent: number, allowedWritesSent = 0): Decision {
   let url: URL;
   try {
     url = new URL(req.url);
@@ -68,7 +100,17 @@ export function decideRequest(policy: ReproPolicy, req: RequestInfo, sent: numbe
   const method = req.method.toUpperCase();
   if (!READ_METHODS.has(method)) {
     const loginWrite = req.phase === "login" && policy.loginAuthPaths.some((p) => url.pathname === p || url.pathname.startsWith(`${p}/`) || url.pathname.startsWith(`${p}?`));
-    if (policy.readOnly && !loginWrite) return { allow: false, kind: "write", reason: `${method} blocked: this reproduction is read-only.` };
+    if (!loginWrite) {
+      const path = url.pathname.replace(/\/+$/, "") || "/";
+      const listed = policy.allowedWrites.find((w) => w.method === method && w.host === host && w.path === path);
+      if (listed) {
+        if (!req.signedIn) return { allow: false, kind: "write", reason: `${method} blocked: allowed saves are only sent while the test account is signed in.` };
+        if (allowedWritesSent >= policy.maxAllowedWrites) return { allow: false, kind: "write", reason: `${method} blocked: the cap of ${policy.maxAllowedWrites} allowed saves per run was reached.` };
+        if (sent >= policy.maxTotal) return { allow: false, kind: "cap", reason: `Request cap of ${policy.maxTotal} reached.` };
+        return { allow: true, allowedWrite: listed };
+      }
+      if (policy.readOnly) return { allow: false, kind: "write", reason: `${method} blocked: this reproduction is read-only.` };
+    }
   }
   if (sent >= policy.maxTotal) return { allow: false, kind: "cap", reason: `Request cap of ${policy.maxTotal} reached.` };
   return { allow: true };

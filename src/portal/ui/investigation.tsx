@@ -400,6 +400,18 @@ function ReproductionView({ id, repro }: { id: string; repro: NonNullable<Report
           </div>
         ))}
       </div>
+      {repro.allowedWritesSent?.length ? (
+        <div className="small">
+          <p><Icon name="info" className="i16" /> Sent {repro.allowedWritesSent.length} save{repro.allowedWritesSent.length === 1 ? "" : "s"} the admin allowed for the test account:</p>
+          <ul className="leads">
+            {repro.allowedWritesSent.slice(0, 6).map((w, i) => (
+              <li key={i} className="mono">
+                {w.method} {new URL(w.url).host}{new URL(w.url).pathname} → {w.status ?? "no answer"}{w.contentType ? ` ${w.contentType}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {repro.blockedWrites.length ? (
         <p className="muted small"><Icon name="info" className="i16" /> Blocked {repro.blockedWrites.length} request{repro.blockedWrites.length === 1 ? "" : "s"} that would have saved data, for example {repro.blockedWrites[0].method} {new URL(repro.blockedWrites[0].url).pathname}.</p>
       ) : null}

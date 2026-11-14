@@ -20,6 +20,8 @@ export type PageObservation = {
   mainText?: string;
   /** The page shows a password field. */
   hasPasswordField?: boolean;
+  /** For a click step: what was clicked. Shown instead of the path. */
+  label?: string;
   error: string | null;
 };
 
@@ -49,12 +51,12 @@ export function judgeRun(
   const assertions: Assertion[] = [];
   const needsSignIn: string[] = [];
   for (const p of pages) {
-    const page = new URL(p.url).pathname;
+    const page = p.label ? `${new URL(p.url).pathname} · ${p.label}` : new URL(p.url).pathname;
     if (p.error) {
       assertions.push({ name: "Page opens", page, expected: "opens", actual: p.error, passed: false, showsDefect: false });
       continue;
     }
-    if (!options.loggedIn && looksLikeSignInWall(p)) {
+    if (!p.label && !options.loggedIn && looksLikeSignInWall(p)) {
       // Not a pass and not the defect: this page could not be checked.
       needsSignIn.push(page);
       assertions.push({ name: "Page shows its content", page, expected: "the page's content", actual: "a sign-in prompt (needs a signed-in customer)", passed: false, showsDefect: false });
@@ -75,6 +77,18 @@ export function judgeRun(
         actual: bad.length ? `${bad.length}: ${bad.slice(0, 3).map((b) => `${new URL(b.url).pathname} → ${b.status} ${b.contentType}`).join("; ")}` : "0",
         passed: bad.length === 0,
         showsDefect: bad.length > 0,
+      });
+    }
+    if (repro.checkHtmlForData) {
+      const failed = p.failedData.filter((f) => f.status >= 500);
+      assertions.push({
+        name: "Data requests do not fail with a server error",
+        page,
+        expected: "0 data requests answered with HTTP 5xx",
+        actual: failed.length ? `${failed.length}: ${failed.slice(0, 3).map((f) => `${new URL(f.url).host}${new URL(f.url).pathname} → ${f.status}`).join("; ")}` : "0",
+        passed: failed.length === 0,
+        // The reported "Network error" is what a page shows when its data request fails.
+        showsDefect: failed.length > 0,
       });
     }
     assertions.push({

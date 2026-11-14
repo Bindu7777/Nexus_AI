@@ -18,6 +18,8 @@ export type RunResult = {
   needsSignIn?: string[];
   pages: PageObservation[];
   blocked: { method: string; url: string; reason: string; kind: string }[];
+  /** Saves the admin allowed that were actually sent, with the answer. */
+  allowedWrites?: { method: string; url: string; status: number | null; contentType: string | null }[];
   requestsSent: number;
   login: { attempted: boolean; ok: boolean; message: string } | null;
   screenshot: string | null;
@@ -27,6 +29,32 @@ export type RunResult = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type PageLike = import("playwright").Page;
+
+/**
+ * The first visible control named by a target: by accessible name, then
+ * aria-label or title, then an icon whose class names it (lucide-heart).
+ */
+async function findControl(page: PageLike, targets: string[]) {
+  for (const t of targets) {
+    const safe = t.replace(/["\\]/g, "");
+    const re = new RegExp(safe.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const candidates = [
+      page.getByRole("button", { name: re }),
+      page.locator(`[aria-label*="${safe}" i], [title*="${safe}" i]`),
+      page.locator(`button:has(svg[class*="${safe.toLowerCase().replace(/\s+/g, "-")}" i]), [role=button]:has(svg[class*="${safe.toLowerCase().replace(/\s+/g, "-")}" i])`),
+    ];
+    for (const c of candidates) {
+      const count = await c.count().catch(() => 0);
+      for (let i = 0; i < Math.min(count, 10); i += 1) {
+        const el = c.nth(i);
+        if (await el.isVisible().catch(() => false)) return el;
+      }
+    }
+  }
+  return null;
+}
 
 export async function runOnce(input: {
   reproduction: Reproduction;
@@ -40,6 +68,7 @@ export async function runOnce(input: {
   const { chromium } = await import("playwright");
   const blocked: RunResult["blocked"] = [];
   const pages: PageObservation[] = [];
+  const allowedWrites: NonNullable<RunResult["allowedWrites"]> = [];
   let sent = 0;
   let phase: "login" | "run" = "run";
   const stamps: number[] = [];
@@ -64,7 +93,7 @@ export async function runOnce(input: {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false, viewport: { width: 1280, height: 800 } });
     await context.route("**/*", async (route) => {
       const req = route.request();
-      const decision = decideRequest(input.policy, { method: req.method(), url: req.url(), phase }, sent);
+      const decision = decideRequest(input.policy, { method: req.method(), url: req.url(), phase, signedIn: !!loginResult?.ok }, sent, allowedWrites.length);
       if (!decision.allow) {
         if (blocked.length < 200) blocked.push({ method: req.method(), url: req.url().slice(0, 300), reason: decision.reason, kind: decision.kind });
         return route.abort("blockedbyclient").catch(() => undefined);
@@ -78,6 +107,7 @@ export async function runOnce(input: {
       }
       stamps.push(Date.now());
       sent += 1;
+      if (decision.allowedWrite) allowedWrites.push({ method: req.method(), url: req.url().slice(0, 300), status: null, contentType: null });
       return route.continue().catch(() => undefined);
     });
     const page = await context.newPage();
@@ -87,6 +117,11 @@ export async function runOnce(input: {
       if (m.type() === "error") current?.consoleErrors.push(m.text().slice(0, 500));
     });
     page.on("response", (r) => {
+      const sentWrite = allowedWrites.find((w) => w.status === null && w.method === r.request().method() && w.url === r.url().slice(0, 300));
+      if (sentWrite) {
+        sentWrite.status = r.status();
+        sentWrite.contentType = (r.headers()["content-type"] ?? "").split(";")[0] || null;
+      }
       const type = r.request().resourceType();
       if (!current || (type !== "fetch" && type !== "xhr")) return;
       const ct = (r.headers()["content-type"] ?? "").toLowerCase();
@@ -113,6 +148,27 @@ export async function runOnce(input: {
           loginResult = { attempted: true, ok: false, message: `Sign-in step failed: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}` };
         }
         phase = "run";
+        continue;
+      }
+      if (step.kind === "click") {
+        const here = page.url();
+        const obs: PageObservation = { url: here, finalUrl: here, status: 200, pageErrors: [], consoleErrors: [], htmlForData: [], failedData: [], text: "", error: null, label: `After clicking ${step.targets.map((t) => `"${t}"`).join(" / ")}` };
+        current = obs;
+        pages.push(obs);
+        try {
+          const control = await findControl(page, step.targets);
+          if (!control) {
+            obs.error = `No visible ${step.targets.map((t) => `"${t}"`).join(" or ")} control was found on ${new URL(here).pathname}.`;
+            continue;
+          }
+          await control.click({ timeout: 10_000 });
+          await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => undefined);
+          await sleep(2000);
+          obs.finalUrl = page.url();
+          obs.text = (await page.innerText("body", { timeout: 5000 }).catch(() => "")).replace(/\s+\n/g, "\n").slice(0, 20_000);
+        } catch (e) {
+          obs.error = timedOut ? "The run reached its time limit." : (e instanceof Error ? e.message.split("\n")[0] : String(e)).slice(0, 300);
+        }
         continue;
       }
       const obs: PageObservation = { url: step.url, finalUrl: step.url, status: null, pageErrors: [], consoleErrors: [], htmlForData: [], failedData: [], text: "", error: null };
@@ -158,6 +214,7 @@ export async function runOnce(input: {
     needsSignIn: verdict.needsSignIn,
     pages,
     blocked,
+    allowedWrites,
     requestsSent: sent,
     login: loginResult,
     screenshot,

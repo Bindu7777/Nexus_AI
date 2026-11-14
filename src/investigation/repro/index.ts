@@ -5,7 +5,7 @@ import type { ConnectorContext } from "../../nexus-admin/connectors/types";
 import type { DefectSpec } from "../ticket";
 import { runOnce, type LoginConfig, type RunResult } from "./browser";
 import { buildReproduction, type Reproduction } from "./plan";
-import { makePolicy, targetRefusal } from "./policy";
+import { makePolicy, parseAllowedWrites, targetRefusal } from "./policy";
 
 export type ReproOutcome =
   | { status: "skipped"; reason: string }
@@ -25,6 +25,8 @@ export type ReproOutcome =
       /** Not reproduced, but some pages could not be checked: no conclusion either way. */
       inconclusive: boolean;
       blockedWrites: { method: string; url: string }[];
+      /** Saves the admin allowed that were actually sent, with the answer. */
+      allowedWritesSent: { method: string; url: string; status: number | null; contentType: string | null }[];
       blockedHosts: string[];
       summary: string;
     };
@@ -65,6 +67,9 @@ export async function reproduceDefect(input: {
     maxTotal: Number(c.maxTotal || 300),
     maxRps: Number(c.maxRps || 5),
     productionReadOnly: Boolean(c.productionReadOnly),
+    // Saves the admin listed and confirmed. Without the confirmation, none.
+    allowedWrites: c.allowWritesConfirm ? parseAllowedWrites(asList(c.allowedWrites)).writes : [],
+    maxAllowedWrites: Number(c.maxAllowedWrites || 3),
   });
   const runner = input.runner ?? runOnce;
   const total = Math.max(1, Math.min(input.runs ?? 3, 5));
@@ -109,6 +114,7 @@ export async function reproduceDefect(input: {
     needsSignIn,
     inconclusive,
     blockedWrites: blockedWrites.slice(0, 20),
+    allowedWritesSent: runs.flatMap((r) => r.allowedWrites ?? []).slice(0, 30),
     blockedHosts,
     summary,
   };

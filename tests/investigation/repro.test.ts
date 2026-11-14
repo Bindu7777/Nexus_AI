@@ -64,6 +64,7 @@ test("plan: pages come from the ticket's steps on the service host; symptoms fro
   assert.deepEqual(r.steps, [
     { kind: "login" },
     { kind: "visit", url: "https://happymomentsindia.com/category/venues", fromStep: spec.steps[0] },
+    { kind: "click", targets: ["Heart", "Like"], fromStep: spec.steps[1] },
     { kind: "visit", url: "https://happymomentsindia.com/liked-vendors", fromStep: spec.steps[2] },
   ]);
   assert.ok(r.symptomTexts.includes("Network error: Unexpected token"));
@@ -438,4 +439,137 @@ test("reproduceDefect: sign-in walls make the result inconclusive, and the pipel
   const { res } = await runWith(async () => out);
   assert.equal(res.verdict, "not_enough_evidence");
   assert.ok(res.report.couldNotVerify.some((c) => c.includes("/liked-vendors needs a signed-in customer")));
+});
+
+// ---------- allowed saves and click steps ----------
+
+test("plan: click targets come from the step's wording by fixed rules", async () => {
+  const { clickTargets } = await import("../../src/investigation/repro/plan.ts");
+  assert.deepEqual(clickTargets("Click on the Heart / Like icon on the top-right corner of the vendor card."), ["Heart", "Like"]);
+  assert.deepEqual(clickTargets('Click the "Save" button.'), ["Save"]);
+  assert.deepEqual(clickTargets("Tap Add to cart or Buy now"), ["Add"]);
+  assert.deepEqual(clickTargets("Observe the heart icon state."), []);
+});
+
+test("policy: an allowed save passes only exactly, only signed in, only up to its cap", async () => {
+  const { parseAllowedWrites } = await import("../../src/investigation/repro/policy.ts");
+  const parsed = parseAllowedWrites(["POST happy-moments-l7fm.vercel.app/api/liked-vendors/save-like", "post https://api.example.com/a/", "GET x.com/y", "POST api.example.com/likes/*"]);
+  assert.deepEqual(parsed.writes, [
+    { method: "POST", host: "happy-moments-l7fm.vercel.app", path: "/api/liked-vendors/save-like" },
+    { method: "POST", host: "api.example.com", path: "/a" },
+  ]);
+  assert.deepEqual(parsed.invalid, ["GET x.com/y", "POST api.example.com/likes/*"]);
+  const p = makePolicy({
+    serviceUrl: "https://happymomentsindia.com",
+    extraHosts: ["happy-moments-l7fm.vercel.app"],
+    loginAuthPaths: [],
+    maxTotal: 100,
+    maxRps: 5,
+    productionReadOnly: true,
+    allowedWrites: parsed.writes.slice(0, 1),
+    maxAllowedWrites: 2,
+  });
+  const save = "https://happy-moments-l7fm.vercel.app/api/liked-vendors/save-like";
+  const d = (method: string, url: string, signedIn: boolean, done = 0) => decideRequest(p, { method, url, phase: "run", signedIn }, 0, done);
+  assert.equal(d("POST", save, true).allow, true);
+  assert.match((d("POST", save, false) as { reason: string }).reason, /only sent while the test account is signed in/);
+  assert.match((d("POST", save, true, 2) as { reason: string }).reason, /cap of 2 allowed saves/);
+  assert.equal(d("PUT", save, true).allow, false, "method must match");
+  assert.equal(d("POST", `${save}-all`, true).allow, false, "path must match exactly");
+  assert.equal(d("POST", "https://happy-moments-l7fm.vercel.app/api/liked-vendors/remove-like", true).allow, false);
+  assert.equal(d("POST", "https://happymomentsindia.com/api/liked-vendors/save-like", true).allow, false, "host must match");
+  assert.equal(d("POST", `${save}?customer=1`, true).allow, true, "query string does not change the path");
+});
+
+test("connector: listed saves need a test account and the explicit confirmation", async () => {
+  const def = (await import("../../src/nexus-admin/connectors/defs/service-under-test.ts")).default;
+  const base = { serviceUrl: "https://happymomentsindia.com", environmentName: "production", productionReadOnly: true, loginPath: "/customer-login", testUsername: "t@example.com" };
+  const scope = { allowedEnvironments: ["production"] };
+  const v = (config: Record<string, unknown>) => def.validate!({ config: { ...base, ...config } as never, scope: scope as never, deployment: "cloud" });
+  assert.match(v({ allowedWrites: ["POST happy-moments-l7fm.vercel.app/api/liked-vendors/save-like"] }).allowWritesConfirm ?? "", /Tick this/);
+  assert.deepEqual(v({ allowedWrites: ["POST happy-moments-l7fm.vercel.app/api/liked-vendors/save-like"], allowWritesConfirm: true }), {});
+  assert.match(v({ allowedWrites: ["DELETE *"], allowWritesConfirm: true }).allowedWrites ?? "", /Not valid/);
+  assert.match(v({ testUsername: "", loginPath: "", allowedWrites: ["POST a.example.com/x"], allowWritesConfirm: true }).allowedWrites ?? "", /need a test account/);
+});
+
+function wishlistSite() {
+  const writes: string[] = [];
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://x");
+    const html = (body: string) => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><body>${body}</body></html>`);
+    };
+    if (req.method !== "GET") writes.push(`${req.method} ${url.pathname}`);
+    const crash = () => {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end("A server error has occurred\n\nFUNCTION_INVOCATION_FAILED");
+    };
+    if (url.pathname === "/login") {
+      return html(`<form id="f"><input type="email"><input type="password"><button type="submit">Sign in</button></form><script>
+        document.getElementById('f').addEventListener('submit', async (e) => { e.preventDefault();
+          await fetch('/auth/v1/token', { method: 'POST', body: 'x' }); localStorage.setItem('in', '1'); location.href = '/category/venues'; });
+      </script>`);
+    }
+    if (url.pathname === "/auth/v1/token") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end("{}");
+    }
+    if (url.pathname === "/category/venues") {
+      return html(`<header><nav>Login</nav></header><main><h1>Venues</h1><div class="card">Sri Sai Events
+        <button id="h"><svg class="lucide lucide-heart" width="10" height="10"></svg></button></div><p id="msg"></p></main><script>
+        document.getElementById('h').addEventListener('click', async () => {
+          try { const r = await fetch('/api/liked-vendors/save-like', { method: 'POST', headers: {'content-type': 'application/json'}, body: '{"customer_id":1,"vendor_id":2}' }); await r.json(); }
+          catch (e) { document.getElementById('msg').textContent = 'Network error: ' + e.message; }
+          fetch('/api/liked-vendors/remove-like', { method: 'POST', body: '{}' }).catch(() => {});
+        });
+      </script>`);
+    }
+    if (url.pathname === "/liked-vendors") {
+      return html(`<main><h1>Liked vendors</h1><div id="out"></div></main><script>
+        fetch('/api/liked-vendors/get-liked-vendors/1').then(r => r.json()).catch(e => { document.getElementById('out').textContent = 'Network error: ' + e.message; });
+      </script>`);
+    }
+    if (url.pathname.startsWith("/api/")) return crash();
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise<{ base: string; host: string; writes: string[]; close: () => void }>((resolve) =>
+    server.listen(0, "127.0.0.1", () => {
+      const port = (server.address() as { port: number }).port;
+      resolve({ base: `http://127.0.0.1:${port}`, host: "127.0.0.1", writes, close: () => { server.closeAllConnections(); server.close(); } });
+    }),
+  );
+}
+
+test("browser: signs in, clicks the heart, sends only the one allowed save, and sees the server error", { timeout: 120_000 }, async () => {
+  const site = await wishlistSite();
+  try {
+    const steps = [`Open ${site.base}/category/venues`, "Click on the Heart / Like icon on the vendor card.", "Open /liked-vendors"];
+    const plan = buildReproduction({ ...spec, steps }, site.base, { login: true });
+    assert.ok(plan.ok);
+    const policy = makePolicy({
+      serviceUrl: site.base,
+      extraHosts: [],
+      loginAuthPaths: ["/auth/v1/token"],
+      maxTotal: 100,
+      maxRps: 20,
+      productionReadOnly: true,
+      allowedWrites: [{ method: "POST", host: site.host, path: "/api/liked-vendors/save-like" }],
+      maxAllowedWrites: 1,
+    });
+    const run = await runOnce({ reproduction: plan.ok ? plan.reproduction : null!, policy, login: { path: "/login", username: "t@example.invalid", password: "pw-for-test" }, timeoutMs: 60_000, workDir: workDir(), index: 1 });
+    assert.equal(run.login?.ok, true, run.login?.message);
+    assert.equal(run.error, null);
+    assert.deepEqual(site.writes, ["POST /auth/v1/token", "POST /api/liked-vendors/save-like"], "only sign-in and the one allowed save reached the site");
+    assert.deepEqual(run.allowedWrites?.map((w) => [w.method, new URL(w.url).pathname, w.status, w.contentType]), [["POST", "/api/liked-vendors/save-like", 500, "text/plain"]]);
+    assert.ok(run.blocked.some((b) => b.kind === "write" && b.url.endsWith("/api/liked-vendors/remove-like")), "an unlisted save stays blocked");
+    assert.equal(run.reproduced, true);
+    const click = run.assertions.filter((a) => a.page.includes('After clicking "Heart"'));
+    assert.ok(click.some((a) => a.showsDefect && a.name === "Data requests do not fail with a server error" && a.actual.includes("/api/liked-vendors/save-like → 500")));
+    assert.ok(click.some((a) => a.showsDefect && a.actual.includes("Network error: Unexpected token")));
+    assert.ok(run.assertions.some((a) => a.page === "/liked-vendors" && a.showsDefect && a.actual.includes("get-liked-vendors/1 → 500")));
+  } finally {
+    site.close();
+  }
 });

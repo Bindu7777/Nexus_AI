@@ -3,6 +3,7 @@
 // admin ticks the explicit read-only override: then Nexus may only load pages
 // and read responses, and every request that would save data is blocked
 // (sign-in excepted, to the configured auth paths only).
+import { parseAllowedWrites } from "../../../investigation/repro/policy";
 import { createReadOnlyHttp } from "../../../../connectors/http";
 import { asList } from "../form";
 import { allowInternalField, defineConnector } from "../types";
@@ -68,6 +69,21 @@ export default defineConnector({
       defaultValue: ["/auth/v1/token"],
       help: "During sign-in only, requests to these paths may POST (for Supabase: /auth/v1/token). Every other write stays blocked.",
     },
+    {
+      name: "allowedWrites",
+      label: "Saves allowed for the test account (exact requests)",
+      type: "list",
+      placeholder: "POST api.example.com/api/likes/save-like",
+      help: "One per line: METHOD host/path, exact, no wildcards. Only these requests may save data, only after the test account has signed in, and only up to the cap below. Every other write stays blocked. Leave empty to stay fully read-only.",
+    },
+    {
+      name: "allowWritesConfirm",
+      label: "I allow exactly these saves on this site for the test account. Each one changes real data (for example, a wishlist row for the test customer).",
+      type: "checkbox",
+      defaultValue: false,
+      help: "Required when any save is listed above.",
+    },
+    { name: "maxAllowedWrites", label: "Hard cap: allowed saves per run", type: "number", defaultValue: 3, min: 1, max: 10 },
     { name: "usernameSelector", label: "Username field selector (optional)", type: "text", placeholder: "input[type=email]" },
     { name: "passwordSelector", label: "Password field selector (optional)", type: "text", placeholder: "input[type=password]" },
     { name: "submitSelector", label: "Sign-in button selector (optional)", type: "text", placeholder: "button[type=submit]" },
@@ -92,6 +108,11 @@ export default defineConnector({
     if (prod && !config.productionReadOnly) errors.serviceUrl = `${prod} To reproduce on production anyway, tick the read-only override.`;
     if (config.testUsername && !config.loginPath) errors.loginPath = "Enter the sign-in page path for the test account.";
     if (env && !allow.includes(env)) errors.environmentName = `${env} is not in the environment allowlist.`;
+    const writes = parseAllowedWrites(asList(config.allowedWrites));
+    if (writes.invalid.length) errors.allowedWrites = `Use METHOD host/path, for example POST api.example.com/api/likes. Not valid: ${writes.invalid.slice(0, 2).join(", ")}`;
+    else if (writes.writes.length > 5) errors.allowedWrites = "List at most 5 saves.";
+    else if (writes.writes.length && !config.testUsername) errors.allowedWrites = "Allowed saves need a test account: they are only sent while it is signed in.";
+    else if (writes.writes.length && !config.allowWritesConfirm) errors.allowWritesConfirm = "Tick this to allow the listed saves.";
     return errors;
   },
   targets: (ctx) => [{ url: String(ctx.config.serviceUrl) }],
@@ -106,6 +127,12 @@ export default defineConnector({
         `${ctx.config.serviceUrl} answered HTTP ${response.status} to one GET. No load was sent.`,
         `Limits: at most ${ctx.config.maxRps} requests per second and ${ctx.config.maxTotal} per run, environment ${ctx.config.environmentName}.`,
         ...(ctx.config.productionReadOnly ? ["Production, read-only: pages are loaded and read; every request that would save data is blocked."] : []),
+        ...(() => {
+          const w = ctx.config.allowWritesConfirm ? parseAllowedWrites(asList(ctx.config.allowedWrites)).writes : [];
+          return w.length
+            ? [`Allowed saves for the signed-in test account, at most ${ctx.config.maxAllowedWrites || 3} per run: ${w.map((x) => `${x.method} ${x.host}${x.path}`).join("; ")}. Every other write is blocked.`]
+            : [];
+        })(),
         ...(ctx.config.testUsername ? [`Test account configured: ${ctx.config.testUsername} (sign-in at ${ctx.config.loginPath}).`] : ["No test account: Nexus reproduces as an anonymous visitor."]),
       ],
       problems: response.status >= 500 ? [`The service answered HTTP ${response.status}.`] : [],
