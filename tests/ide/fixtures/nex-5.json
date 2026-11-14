@@ -1,0 +1,35 @@
+{
+  "ticketRef": "NEX-5",
+  "capabilities": [
+    "ticket"
+  ],
+  "results": {
+    "ticket": {
+      "tool": "jira_get_issue",
+      "output": {
+        "key": "NEX-5",
+        "fields": {
+          "issuetype": {
+            "name": "Defect test"
+          },
+          "project": {
+            "key": "NEX",
+            "name": "NEXUS"
+          },
+          "labels": [
+            "nexus-demo"
+          ],
+          "summary": "Checkout p95 latency spikes to over 600 ms under load",
+          "description": "Simulated sandbox data. Expected agent outcome: find the cause. This is not a customer incident and it is not a measurement.",
+          "priority": {
+            "name": "High"
+          },
+          "created": "2026-11-01T10:00:00.000+0530",
+          "reporter": {
+            "displayName": "Demo reporter"
+          }
+        }
+      }
+    }
+  }
+}

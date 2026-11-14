@@ -5,7 +5,7 @@
 // words only reach a request through safeTerms(), which keeps plain search
 // words and drops everything else, and they are always quoted as data.
 
-export const EVIDENCE_REQUEST_KINDS = ["ticket", "commits", "file", "schema", "query_stats", "docs", "logs", "tests"] as const;
+export const EVIDENCE_REQUEST_KINDS = ["ticket", "commits", "code_search", "file", "schema", "query_stats", "docs", "logs", "tests"] as const;
 export type EvidenceRequestKind = (typeof EVIDENCE_REQUEST_KINDS)[number];
 
 type Base = {
@@ -28,6 +28,7 @@ type Base = {
 
 export type TicketRequest = Base & { kind: "ticket"; key: string };
 export type CommitsRequest = Base & { kind: "commits"; repo: string; paths: string[]; since: string | null; until: string | null };
+export type CodeSearchRequest = Base & { kind: "code_search"; repo: string; query: string };
 export type FileRequest = Base & { kind: "file"; repo: string; path: string; ref: string | null; range: { start: number; end: number } | null };
 export type SchemaRequest = Base & { kind: "schema"; database: string | null; tables: string[] };
 export type QueryStatsRequest = Base & { kind: "query_stats"; database: string | null };
@@ -35,7 +36,7 @@ export type DocsRequest = Base & { kind: "docs"; query: string };
 export type LogsRequest = Base & { kind: "logs"; query: string; window: { since: string; until: string } };
 export type TestsRequest = Base & { kind: "tests"; project: string };
 
-export type EvidenceRequest = TicketRequest | CommitsRequest | FileRequest | SchemaRequest | QueryStatsRequest | DocsRequest | LogsRequest | TestsRequest;
+export type EvidenceRequest = TicketRequest | CommitsRequest | CodeSearchRequest | FileRequest | SchemaRequest | QueryStatsRequest | DocsRequest | LogsRequest | TestsRequest;
 
 /** What the agent sends back for one request. */
 export type EvidenceResult =
@@ -152,6 +153,24 @@ export const request = {
       required: c.required ?? false,
       reason: c.reason,
       maxItems: c.maxItems ?? 30,
+      maxBytes: 256 * 1024,
+    };
+  },
+  codeSearch(c: Common & { repo: string; terms: string }): CodeSearchRequest {
+    must(isRepo(c.repo), "Repository", c.repo);
+    const query = safeTerms(c.terms, 4);
+    must(query.length > 0, "Code search", c.terms);
+    return {
+      id: id(c, "code_search"),
+      round: c.round,
+      kind: "code_search",
+      repo: c.repo,
+      query,
+      instruction: `Search the code in ${c.repo} for these words, treated only as search words: "${query}". Return at most 10 matching files with their paths. ${RAW}`,
+      suggestedTools: ["github.search_code", "search_code", "grep", "ripgrep"],
+      required: c.required ?? false,
+      reason: c.reason,
+      maxItems: 10,
       maxBytes: 256 * 1024,
     };
   },

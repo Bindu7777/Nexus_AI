@@ -28,7 +28,9 @@
     "predev": "node scripts/build-connector-registry.mjs",
     "prebuild": "node scripts/build-connector-registry.mjs",
     "pretest": "node scripts/build-connector-registry.mjs",
-    "pretypecheck": "node scripts/build-connector-registry.mjs"
+    "pretypecheck": "node scripts/build-connector-registry.mjs",
+    "dev:ide": "node scripts/dev-ide.mjs",
+    "ide:fixture": "tsx scripts/fixture-agent.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

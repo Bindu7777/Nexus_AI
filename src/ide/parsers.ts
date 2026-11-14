@@ -18,6 +18,8 @@ export type ParsedResult =
       items: EvidenceItem[];
       /** Structured ticket, for the ticket request only. */
       ticket?: TicketFull;
+      /** Jira fields the demo engine reads that TicketFull does not carry. */
+      ticketExtra?: TicketExtra;
       /** One line for the progress view, e.g. "12 commits in window". */
       summary: string;
       rawSha256: string;
@@ -28,6 +30,8 @@ export type ParsedResult =
   | { ok: false; error: string; rawSha256: string | null; bytes: number };
 
 type Ok = Extract<EvidenceResult, { status: "ok" }>;
+
+export type TicketExtra = { issueType: string | null; projectKey: string | null; reporter: string | null };
 
 // ---------- raw handling ----------
 
@@ -144,14 +148,14 @@ export function parseResult(req: EvidenceRequest, result: Ok, now = new Date()):
   const value = unwrap(result.output);
   try {
     const out = PARSERS[req.kind](req as never, value, b);
-    return { ok: true, items: out.items.slice(0, req.maxItems), ticket: out.ticket, summary: out.summary, rawSha256: rawSha256!, bytes, tool, redactions: b.redactions };
+    return { ok: true, items: out.items.slice(0, req.maxItems), ticket: out.ticket, ticketExtra: out.ticketExtra, summary: out.summary, rawSha256: rawSha256!, bytes, tool, redactions: b.redactions };
   } catch (error) {
     if (error instanceof Reject) return { ok: false, error: error.message, rawSha256, bytes };
     return { ok: false, error: "The result could not be read.", rawSha256, bytes };
   }
 }
 
-type Out = { items: EvidenceItem[]; summary: string; ticket?: TicketFull };
+type Out = { items: EvidenceItem[]; summary: string; ticket?: TicketFull; ticketExtra?: TicketExtra };
 type Parser<K extends EvidenceRequest["kind"]> = (req: Extract<EvidenceRequest, { kind: K }>, value: unknown, b: Builder) => Out;
 
 const asText = (v: unknown) => (typeof v === "string" ? v : null);
@@ -182,7 +186,10 @@ const ticket: Parser<"ticket"> = (req, value, b) => {
   noError(value);
   const o = obj(value);
   let t: TicketFull | null = null;
+  let extra: TicketExtra | undefined;
   if (o && obj(o.fields)) {
+    const fields = obj(o.fields);
+    extra = { issueType: str(pick(fields, "issuetype.name")), projectKey: str(pick(fields, "project.key")), reporter: str(pick(fields, "reporter.displayName")) };
     const key = str(o.key);
     if (!keyMatches(req.key, key)) throw new Reject(`The result is ticket ${key}, not ${req.key}.`);
     const self = str(o.self);
@@ -260,7 +267,8 @@ const ticket: Parser<"ticket"> = (req, value, b) => {
     },
     20_000,
   );
-  return { items: [item], ticket: clean, summary: `${clean.source === "github-issues" ? "GitHub issue" : "Ticket"} ${req.key} read` };
+  if (extra?.reporter) extra.reporter = b.clean(extra.reporter, 120);
+  return { items: [item], ticket: clean, ticketExtra: extra, summary: `${clean.source === "github-issues" ? "GitHub issue" : "Ticket"} ${req.key} read` };
 };
 
 // ---------- commits ----------
@@ -316,6 +324,51 @@ const commits: Parser<"commits"> = (req, value, b) => {
     }, 4000),
   );
   return { items, summary: `${items.length} commit${items.length === 1 ? "" : "s"} in window` };
+};
+
+// ---------- code search ----------
+
+const codeSearch: Parser<"code_search"> = (req, value, b) => {
+  noError(value);
+  let hits: { path: string; line: number | null; text: string }[] = [];
+  const arr = listOf(value, "items", "matches", "files");
+  if (arr) {
+    hits = arr.map((h) => {
+      const o = obj(h);
+      const frag = (listOf(o?.text_matches) ?? []).map((m) => str(pick(obj(m), "fragment")) ?? "").join("\n");
+      return {
+        path: (str(pick(o, "path", "file", "filename", "name")) ?? str(h) ?? "").replace(/^\.?\//, ""),
+        line: Number(pick(o, "line", "lineNumber", "line_number")) || null,
+        text: frag || (str(pick(o, "text", "snippet", "content", "match")) ?? ""),
+      };
+    });
+  } else if (typeof value === "string") {
+    // grep / ripgrep style: path:line:text, or bare paths.
+    for (const l of value.split("\n").map((x) => x.trim()).filter(Boolean)) {
+      const m = l.match(/^(?:\.\/)?([^:\s]+\.[A-Za-z0-9]+):(\d+):(.*)$/) ?? l.match(/^(?:\.\/)?([^:\s]+\.[A-Za-z0-9]+)$/);
+      if (m) hits.push({ path: m[1], line: m[2] ? Number(m[2]) : null, text: m[3] ?? "" });
+    }
+    if (!hits.length && !/no (results|matches)/i.test(value)) throw new Reject("The code search result is neither a JSON list of files nor path:line:text lines.");
+  } else {
+    throw new Reject("The code search result is not a list of files.");
+  }
+  const valid = hits.filter((h) => /^(?!\/)(?!.*\.\.)[A-Za-z0-9_./@+-]{1,300}$/.test(h.path));
+  const seen = new Set<string>();
+  const items = valid
+    .filter((h) => (seen.has(h.path) ? false : (seen.add(h.path), true)))
+    .slice(0, req.maxItems)
+    .map((h) =>
+      b.item({
+        kind: "code",
+        ref: `ide:code_search:${req.repo}:${h.path}${h.line ? `#L${h.line}` : ""}`,
+        timestamp: null,
+        title: `${h.path}${h.line ? `:${h.line}` : ""} matches "${req.query}"`,
+        excerpt: h.text,
+        location: { path: h.path, startLine: h.line ?? undefined, endLine: h.line ?? undefined },
+        meta: { repo: req.repo, matchedTerm: req.query },
+      }, 2000),
+    );
+  return { items, summary: `code search: ${items.length} file${items.length === 1 ? "" : "s"}` };
 };
 
 // ---------- file ----------
@@ -543,6 +596,7 @@ const tests: Parser<"tests"> = (req, value, b) => {
 const PARSERS: { [K in EvidenceRequest["kind"]]: Parser<K> } = {
   ticket,
   commits,
+  code_search: codeSearch,
   file,
   schema,
   query_stats: queryStats,
