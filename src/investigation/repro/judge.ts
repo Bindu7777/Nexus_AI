@@ -22,6 +22,8 @@ export type PageObservation = {
   hasPasswordField?: boolean;
   /** For a click step: what was clicked. Shown instead of the path. */
   label?: string;
+  /** Data requests the page attempted that Nexus held back under its rate cap and never sent. */
+  heldBack?: number;
   error: string | null;
 };
 
@@ -92,6 +94,17 @@ export function judgeRun(
         passed: failed.length === 0,
         // The reported "Network error" is what a page shows when its data request fails.
         showsDefect: failed.length > 0,
+      });
+    }
+    if ((p.heldBack ?? 0) > 50) {
+      // Recorded, not counted as the defect: the page tried far more requests than a page normally makes.
+      assertions.push({
+        name: "Page makes a normal number of data requests",
+        page,
+        expected: "at most 50 data requests",
+        actual: `${p.heldBack} more data requests attempted and held back by Nexus's rate cap (never sent)`,
+        passed: false,
+        showsDefect: false,
       });
     }
     assertions.push({

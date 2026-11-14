@@ -618,3 +618,38 @@ test("browser: a cross-origin API whose CORS pre-check crashes is caught as a fa
     site.close();
   }
 });
+
+test("browser: requests held back by the rate cap are not site failures, and a flood is reported", { timeout: 90_000 }, async () => {
+  let hits = 0;
+  const site = http.createServer((req, res) => {
+    if (req.url?.startsWith("/api/")) {
+      hits += 1;
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end("[]");
+    }
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(`<!doctype html><html><body><main><h1>Venues</h1></main><script>for (let i = 0; i < 80; i++) fetch('/api/liked/' + i).catch(() => {});</script></body></html>`);
+  });
+  await new Promise<void>((r) => site.listen(0, "127.0.0.1", () => r()));
+  const base = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+  try {
+    const plan = buildReproduction({ ...spec, steps: [`Open ${base}/category/venues`] }, base, { login: false });
+    const run = await runOnce({
+      reproduction: plan.ok ? plan.reproduction : null!,
+      policy: makePolicy({ serviceUrl: base, extraHosts: [], loginAuthPaths: [], maxTotal: 100, maxRps: 5, productionReadOnly: true }),
+      login: null,
+      timeoutMs: 45_000,
+      workDir: workDir(),
+      index: 1,
+    });
+    assert.ok(hits <= run.requestsSent, `only requests Nexus let out reached the site (hits ${hits}, sent ${run.requestsSent})`);
+    assert.equal(run.reproduced, false, "throttled requests do not count as the defect");
+    assert.ok(!run.assertions.some((a) => a.showsDefect), JSON.stringify(run.assertions.filter((a) => a.showsDefect)));
+    const flood = run.assertions.find((a) => a.name === "Page makes a normal number of data requests");
+    assert.ok(flood, `the flood is recorded (heldAtEnd ${run.heldAtEnd}, sent ${run.requestsSent}, ${JSON.stringify(run.assertions.map((a) => a.name))})`);
+    assert.match(flood!.actual, /held back by Nexus's rate cap \(never sent\)/);
+  } finally {
+    site.closeAllConnections();
+    site.close();
+  }
+});
