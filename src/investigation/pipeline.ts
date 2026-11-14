@@ -118,6 +118,28 @@ export function sanitizeEvidence(item: EvidenceItem, secrets: string[]): Evidenc
   };
 }
 
+/**
+ * Words to search the code for, from the requests that failed while
+ * reproducing: "/api/liked-vendors/get-liked-vendors/28" →
+ * ["get-liked-vendors", "liked-vendors"]. IDs and generic words are dropped.
+ */
+export function requestSearchTerms(urls: string[]): string[] {
+  const generic = new Set(["api", "v1", "v2", "v3", "rest", "graphql", "index", "public", "static"]);
+  const out: string[] = [];
+  for (const raw of urls) {
+    let segments: string[];
+    try {
+      segments = new URL(raw).pathname.split("/").filter(Boolean);
+    } catch {
+      continue;
+    }
+    const named = segments.filter((seg) => /^[a-z][a-z0-9_-]{3,}$/i.test(seg) && !generic.has(seg.toLowerCase()) && !/^[0-9a-f-]{16,}$/i.test(seg));
+    // The most specific (last) name first, then its parents.
+    for (const seg of named.reverse()) if (!out.includes(seg)) out.push(seg);
+  }
+  return out.slice(0, 4);
+}
+
 /** Page paths named in the steps: URL paths and bare paths such as /liked-vendors. */
 export function stepPaths(steps: string[]): string[] {
   const out = new Set<string>();
@@ -342,6 +364,8 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
     r.start("gather");
     const fromIso = spec.window?.from;
     const terms = spec.searchTerms.slice(0, 4);
+    // The requests that actually failed while reproducing are the best lead into the code.
+    const reproTerms = repro?.status === "ran" && repro.reproduced ? requestSearchTerms((repro.failingRequests ?? []).map((f) => f.url)) : [];
     const gatherOne = async (s: SourceHandle): Promise<EvidenceItem[]> => {
       const c = s.connector;
       if (!c) throw new Error("This connector could not be prepared.");
@@ -351,6 +375,13 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
         if (typeof gh.listCommits === "function" && Array.isArray(gh.repos)) {
           for (const repo of gh.repos.slice(0, 3)) {
             found.push(...(await gh.listCommits(`${repo.owner}/${repo.repo}`, { since: fromIso, limit: 10 })));
+          }
+        }
+        for (const t of reproTerms.slice(0, 3)) {
+          try {
+            found.push(...(await c.search({ text: t, limit: 5 })).map((e) => ({ ...e, meta: { ...e.meta, matchedTerm: t, matchedFrom: "reproduction" } })));
+          } catch (error) {
+            if (!found.length) throw error;
           }
         }
         for (const t of terms.slice(0, 3)) {
@@ -382,7 +413,13 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
     for (const s of gatherable) {
       checkCancel();
       if (s.category === "services" || s.category === "tests" || s.category === "design") {
-        sourceLines.push({ name: s.name, category: s.category, status: "skipped", count: 0, message: "Not read in this build." });
+        const message =
+          s.category === "services"
+            ? deps.reproduce
+              ? "Used by the Reproduce step (see above), not searched for evidence."
+              : "Not used: reproduction is not available for this company."
+            : "Not read in this build.";
+        sourceLines.push({ name: s.name, category: s.category, status: "skipped", count: 0, message });
         continue;
       }
       try {
@@ -417,13 +454,17 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
         path: p,
         startLine: e.location?.startLine ?? null,
         endLine: e.location?.endLine ?? null,
-        reason: term ? `Code search matched "${term}" from the ticket.` : "Named in the ticket.",
+        reason: term
+          ? e.meta?.matchedFrom === "reproduction"
+            ? `Code search matched "${term}", from the request that failed while reproducing.`
+            : `Code search matched "${term}" from the ticket.`
+          : "Named in the ticket.",
         ref: e.ref,
       });
       if (located.length >= 10) break;
     }
     if (located.length) {
-      r.finish("locate", "done", `${located.length} code location${located.length === 1 ? "" : "s"} tied to the ticket by search.`, { located });
+      r.finish("locate", "done", `${located.length} code location${located.length === 1 ? "" : "s"} tied to the defect by search.`, { located });
     } else {
       const msg = "No code location could be tied to the ticket from the evidence read.";
       r.finish("locate", "skipped", msg);

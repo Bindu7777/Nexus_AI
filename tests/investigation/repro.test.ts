@@ -653,3 +653,61 @@ test("browser: requests held back by the rate cap are not site failures, and a f
     site.close();
   }
 });
+
+// ---------- locate from the reproduction ----------
+
+test("locate: search words come from the failing request's path, without IDs or generic words", async () => {
+  const { requestSearchTerms } = await import("../../src/investigation/pipeline.ts");
+  assert.deepEqual(requestSearchTerms(["https://happy-moments-l7fm.vercel.app/api/liked-vendors/get-liked-vendors/28"]), ["get-liked-vendors", "liked-vendors"]);
+  assert.deepEqual(requestSearchTerms(["https://x.supabase.co/rest/v1/customer_liked_vendors?select=*", "https://x.example/api/v2/orders/3f2a9c1e-77aa-4f7e-9d2b-0a1b2c3d4e5f"]), ["customer_liked_vendors", "orders"]);
+  const { failingRequests } = await import("../../src/investigation/repro/index.ts");
+  const page = (urls: string[]) => ({ url: "", finalUrl: "", status: 200, pageErrors: [], consoleErrors: [], htmlForData: [], text: "", error: null, failedData: urls.map((url) => ({ url, status: 0 })) });
+  assert.deepEqual(failingRequests([{ pages: [page(["https://a.example/api/x/1?t=1", "https://a.example/api/x/1?t=2"])] }, { pages: [page(["https://a.example/api/y"])] }]), [
+    { method: "GET", url: "https://a.example/api/x/1", status: 0, count: 2 },
+    { method: "GET", url: "https://a.example/api/y", status: 0, count: 1 },
+  ]);
+});
+
+test("pipeline: Locate searches the code for the request that failed while reproducing", async () => {
+  const searched: string[] = [];
+  const code = {
+    id: "github",
+    kind: "code",
+    readOnly: true,
+    implemented: true,
+    description: "fake",
+    async test() {
+      return { ok: true, reached: [], problems: [], warnings: [] };
+    },
+    async search(q: { text: string }) {
+      searched.push(q.text);
+      if (q.text !== "get-liked-vendors") return [];
+      return [{ source: "github", kind: "code" as const, ref: "github:file:o/r@main:backend/routes/likedVendors.js", timestamp: null, retrievedAt: "", title: "o/r:backend/routes/likedVendors.js", excerpt: "router.get('/get-liked-vendors/:customer_id'", observation: "observed" as const, location: { path: "backend/routes/likedVendors.js" } }];
+    },
+    async fetch() {
+      return null;
+    },
+  };
+  const lines: Record<string, string> = {};
+  const res = await runPipeline({
+    readTicket: async () => ({ ok: true, ticket: { ...TICKET, description: "Steps to reproduce:\n1. Open /liked-vendors\nExpected: the list shows.\nActual: \"Network error: Unexpected token\" is shown." } }),
+    sources: [
+      { connectorId: 1, registryId: "github", category: "code", name: "GitHub", status: "healthy", connector: code as never, secretValues: [] },
+      { connectorId: 2, registryId: "service-under-test", category: "services", name: "HappyMoments website", status: "healthy", connector: null, secretValues: [] },
+    ],
+    reproduce: async () => ({
+      status: "ran" as const, target: "https://happymomentsindia.com", mode: "production-read-only" as const, loggedIn: true,
+      reproduction: { target: "https://happymomentsindia.com", steps: [{ kind: "visit" as const, url: "https://happymomentsindia.com/liked-vendors", fromStep: "x" }], symptomTexts: [], checkHtmlForData: true, basis: [] },
+      runs: [], reproducedRuns: 3, totalRuns: 3, reproduced: true, flaky: false, needsSignIn: [], inconclusive: false, blockedWrites: [], blockedHosts: [], allowedWritesSent: [],
+      failingRequests: [{ method: "GET", url: "https://happy-moments-l7fm.vercel.app/api/liked-vendors/get-liked-vendors/28", status: 0, count: 9 }],
+      summary: "Reproduced in 3 of 3 runs.",
+    }),
+    isCancelled: () => false,
+    recorder: { start: () => undefined, finish: (s, st, sum) => void (lines[s] = `${st}: ${sum}`), evidence: () => undefined },
+  });
+  assert.equal(searched[0], "get-liked-vendors", "the failing request is searched first");
+  assert.deepEqual(res.report.located.map((l) => [l.path, l.reason]), [["backend/routes/likedVendors.js", 'Code search matched "get-liked-vendors", from the request that failed while reproducing.']]);
+  assert.match(lines.locate, /^done: 1 code location tied to the defect/);
+  const site = res.report.sources.find((s) => s.name === "HappyMoments website");
+  assert.equal(site?.message, "Used by the Reproduce step (see above), not searched for evidence.");
+});

@@ -25,6 +25,8 @@ export type ReproOutcome =
       /** Not reproduced, but some pages could not be checked: no conclusion either way. */
       inconclusive: boolean;
       blockedWrites: { method: string; url: string }[];
+      /** Data requests that failed or came back as a web page while reproducing, most frequent first. */
+      failingRequests: { method: string; url: string; status: number; count: number }[];
       /** Saves the admin allowed that were actually sent, with the answer. */
       allowedWritesSent: { method: string; url: string; status: number | null; contentType: string | null }[];
       blockedHosts: string[];
@@ -115,7 +117,31 @@ export async function reproduceDefect(input: {
     inconclusive,
     blockedWrites: blockedWrites.slice(0, 20),
     allowedWritesSent: runs.flatMap((r) => r.allowedWrites ?? []).slice(0, 30),
+    failingRequests: failingRequests(runs),
     blockedHosts,
     summary,
   };
+}
+
+/** Failed or HTML-for-data requests across runs, grouped by URL without query string. */
+export function failingRequests(runs: Pick<RunResult, "pages">[]) {
+  const counts = new Map<string, { method: string; url: string; status: number; count: number }>();
+  for (const run of runs) {
+    for (const p of run.pages ?? []) {
+      const bad = [...p.failedData.map((f) => ({ url: f.url, status: f.status })), ...p.htmlForData.map((h) => ({ url: h.url, status: h.status }))];
+      for (const b of bad) {
+        let key: string;
+        try {
+          const u = new URL(b.url);
+          key = `${u.origin}${u.pathname}`;
+        } catch {
+          continue;
+        }
+        const hit = counts.get(key) ?? { method: "GET", url: key, status: b.status, count: 0 };
+        hit.count += 1;
+        counts.set(key, hit);
+      }
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 10);
 }
