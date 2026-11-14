@@ -1,0 +1,29 @@
+image:
+  repository: nexus-mcp
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+
+# The address engineers' IDEs use (https). The MCP endpoint is <publicUrl>/mcp.
+publicUrl: https://nexus.example.internal
+
+# Your identity provider. Tokens must name <publicUrl>/mcp as audience.
+oidc:
+  issuer: ""
+  jwksUrl: ""
+  company: ""
+  companyClaim: ""
+  algorithms: "RS256,ES256"
+
+# Built-in username and password sign-in for pilots.
+pilotLogin: false
+
+persistence:
+  size: 2Gi
+  storageClass: ""
+
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { cpu: "1", memory: 512Mi }
+
+# Nexus needs no Jira, GitHub, database or docs credentials in this mode.
+# There is deliberately no secret here.

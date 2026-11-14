@@ -188,7 +188,9 @@ export function createIdeHttpServer(config: HttpConfig, deps: IdeDeps) {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
-    // Only answer for the configured host name (DNS rebinding protection).
+    // Liveness for container health checks: no data, any host name.
+    if (req.url === "/health") return send(res, 200, { ok: true });
+    // Everything else answers only for the configured host name (DNS rebinding protection).
     if (req.headers.host !== publicHost) return send(res, 421, { error: "Wrong host." });
     const url = new URL(req.url ?? "/", base);
     sweep();
@@ -202,7 +204,6 @@ export function createIdeHttpServer(config: HttpConfig, deps: IdeDeps) {
       });
     }
     if (url.pathname === "/mcp") return handleMcp(req, res);
-    if (url.pathname === "/health") return send(res, 200, { ok: true });
     if (!pilot) return send(res, 404, { error: "Not found." });
 
     if (url.pathname === "/.well-known/oauth-authorization-server") {
@@ -313,7 +314,7 @@ export function httpConfigFromEnv(env = process.env): HttpConfig & { host: strin
   return { publicUrl, host, port, pilot, oidc };
 }
 
-async function main() {
+export async function startHttpFromEnv() {
   const cfg = httpConfigFromEnv();
   const root = process.env.NEXUS_PROJECT_ROOT ?? path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
   const deps: IdeDeps = {
@@ -327,9 +328,10 @@ async function main() {
   });
 }
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+// Run directly (tsx ide-http.ts) only; inside the bundled nexus-mcp command, cli.ts decides.
+const isMain = Boolean(process.argv[1] && /ide-http\.ts$/.test(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href);
 if (isMain) {
-  main().catch((error: unknown) => {
+  startHttpFromEnv().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });

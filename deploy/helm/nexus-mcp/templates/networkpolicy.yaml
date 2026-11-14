@@ -1,0 +1,13 @@
+# Stub: lets the pod reach DNS and HTTPS (the identity provider's key set) only.
+# Narrow the HTTPS rule to your IdP's address range before use.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-nexus-mcp
+spec:
+  podSelector:
+    matchLabels: { app: nexus-mcp, release: {{ .Release.Name }} }
+  policyTypes: ["Egress"]
+  egress:
+    - ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+    - ports: [{ protocol: TCP, port: 443 }]

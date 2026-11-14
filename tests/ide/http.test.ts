@@ -110,7 +110,7 @@ test("unauthenticated calls get 401 with the MCP challenge; metadata describes t
   // fetch cannot override Host, so send this one with http.request.
   const u = new URL(s.base);
   const status = await new Promise<number>((resolve, reject) => {
-    const r = http.request({ host: u.hostname, port: u.port, path: "/health", headers: { host: "evil.example.com" } }, (res) => {
+    const r = http.request({ host: u.hostname, port: u.port, path: "/.well-known/oauth-protected-resource", headers: { host: "evil.example.com" } }, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
     });

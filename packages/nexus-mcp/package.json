@@ -1,0 +1,15 @@
+{
+  "name": "nexus-mcp",
+  "version": "0.2.0",
+  "description": "The Nexus MCP server for engineers: investigate a defect from your IDE with your own connected tools. Read-only toward your systems.",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": { "nexus-mcp": "dist/nexus-mcp.mjs" },
+  "files": ["dist", "services", ".env.example", "README.md"],
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@node-rs/argon2": "2.2.2",
+    "better-sqlite3": "12.11.1"
+  }
+}

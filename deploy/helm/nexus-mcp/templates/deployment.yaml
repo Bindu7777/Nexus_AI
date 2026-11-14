@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-nexus-mcp
+  labels: { app: nexus-mcp, release: {{ .Release.Name }} }
+spec:
+  replicas: 1 # one writer for the SQLite store
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: nexus-mcp, release: {{ .Release.Name }} }
+  template:
+    metadata:
+      labels: { app: nexus-mcp, release: {{ .Release.Name }} }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000 }
+      containers:
+        - name: nexus-mcp
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--http"]
+          ports: [{ name: http, containerPort: 4320 }]
+          env:
+            - { name: NEXUS_PUBLIC_URL, value: {{ .Values.publicUrl | quote }} }
+            - { name: NEXUS_OIDC_ISSUER, value: {{ .Values.oidc.issuer | quote }} }
+            - { name: NEXUS_OIDC_JWKS_URL, value: {{ .Values.oidc.jwksUrl | quote }} }
+            - { name: NEXUS_OIDC_COMPANY, value: {{ .Values.oidc.company | quote }} }
+            - { name: NEXUS_OIDC_COMPANY_CLAIM, value: {{ .Values.oidc.companyClaim | quote }} }
+            - { name: NEXUS_OIDC_ALGORITHMS, value: {{ .Values.oidc.algorithms | quote }} }
+            - { name: NEXUS_PILOT_LOGIN, value: {{ ternary "1" "0" .Values.pilotLogin | quote }} }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          readinessProbe: { httpGet: { path: /health, port: http } }
+          livenessProbe: { httpGet: { path: /health, port: http } }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: {{ .Release.Name }}-nexus-mcp }
+        - name: tmp
+          emptyDir: {}

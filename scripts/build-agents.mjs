@@ -96,15 +96,18 @@ ${workflow}
 `,
 };
 
+// "nexus" is the seven-tool demo server; "nexus-ide" is the engineer-mode
+// server (docs/ide-setup.md) against the seeded demo company.
+const ideCommand = { command: "npm", args: ["run", "--silent", "dev:ide"] };
 const mcpFiles = {
   ".vscode/mcp.json": {
-    servers: { nexus: { type: "stdio", ...mcpCommand } },
+    servers: { nexus: { type: "stdio", ...mcpCommand }, "nexus-ide": { type: "stdio", ...ideCommand } },
   },
   ".cursor/mcp.json": {
-    mcpServers: { nexus: { type: "stdio", ...mcpCommand } },
+    mcpServers: { nexus: { type: "stdio", ...mcpCommand }, "nexus-ide": { type: "stdio", ...ideCommand } },
   },
   ".mcp.json": {
-    mcpServers: { nexus: { type: "stdio", ...mcpCommand } },
+    mcpServers: { nexus: { type: "stdio", ...mcpCommand }, "nexus-ide": { type: "stdio", ...ideCommand } },
   },
 };
 

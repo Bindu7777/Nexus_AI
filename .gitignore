@@ -54,3 +54,7 @@ yarn-error.log*
 *.sqlite-shm
 /extensions/vscode-nexus/dist
 *.vsix
+/packages/nexus-mcp/dist
+/packages/nexus-mcp/services
+/packages/nexus-mcp/node_modules
+/nexus-mcp-*.tgz

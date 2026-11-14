@@ -34,7 +34,10 @@
     "start:ide-http": "tsx services/mcp/ide-http.ts",
     "ide:user": "tsx scripts/ide-user.mts",
     "ide-extension:build": "node scripts/build-ide-extension.mjs",
-    "ide-extension:typecheck": "tsc --noEmit -p extensions/vscode-nexus"
+    "ide-extension:typecheck": "tsc --noEmit -p extensions/vscode-nexus",
+    "nexus-mcp:build": "node scripts/build-nexus-mcp.mjs",
+    "nexus-mcp:pack": "npm run nexus-mcp:build && cd packages/nexus-mcp && npm pack --pack-destination ../..",
+    "ide-extension:package": "npm run ide-extension:build && cd extensions/vscode-nexus && npx vsce package --allow-missing-repository --skip-license --no-dependencies -o ../../nexus-vscode-0.2.0.vsix"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

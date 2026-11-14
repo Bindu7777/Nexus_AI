@@ -250,15 +250,16 @@ export function localDeps(): IdeDeps {
   };
 }
 
-async function main() {
+export async function startStdio() {
   const deps = localDeps();
   const server = createIdeMcpServer(deps, localCaller);
   await server.connect(new StdioServerTransport());
 }
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+// Run directly (tsx ide-server.ts) only; inside the bundled nexus-mcp command, cli.ts decides.
+const isMain = Boolean(process.argv[1] && /ide-server\.ts$/.test(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href);
 if (isMain) {
-  main().catch((error: unknown) => {
+  startStdio().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });
