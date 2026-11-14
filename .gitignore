@@ -51,3 +51,8 @@ yarn-error.log*
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Analysis & temporary worktrees
+graphify-out/
+.claude/worktrees/
+

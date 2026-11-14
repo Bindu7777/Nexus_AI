@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nexus-admin-dev",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd .claude/worktrees/marketing-site && node scripts/build-connector-registry.mjs && NEXUS_DEV_BYPASS_LOGIN=1 NEXUS_DEV_PORTAL_USER=HM/221272 NEXUS_SECRETS_KEY_FILE=.data/secrets.key NEXUS_ALLOW_HTTP_COOKIES=1 npx next dev --turbopack -H 127.0.0.1 -p 4317"
+      ],
+      "port": 4317
+    }
+  ]
+}
