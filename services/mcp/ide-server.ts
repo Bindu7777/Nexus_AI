@@ -72,7 +72,12 @@ async function guarded<T>(fn: () => Promise<T> | T) {
   }
 }
 
-export function createIdeMcpServer(deps: IdeDeps, caller: () => Caller) {
+export type IdeServerOptions = {
+  /** HTTP mode: returns why this caller may not approve (for example, a missing nexus.approve scope), or null. */
+  approvalDenied?: () => string | null;
+};
+
+export function createIdeMcpServer(deps: IdeDeps, caller: () => Caller, options: IdeServerOptions = {}) {
   const server = new McpServer({ name: "nexus", version: "0.2.0" }, { instructions: INVESTIGATE_PROMPT.replaceAll("{ticket}", "<ticket>") });
   const clientName = () => server.server.getClientVersion()?.name ?? null;
 
@@ -166,7 +171,12 @@ export function createIdeMcpServer(deps: IdeDeps, caller: () => Caller) {
       inputSchema: { investigationId: z.string().max(80), confirmation: z.string().max(100) },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
-    async ({ investigationId, confirmation }) => guarded(() => approve(deps, caller(), { investigationId, confirmation }, { clientName: clientName() })),
+    async ({ investigationId, confirmation }) =>
+      guarded(() => {
+        const denied = options.approvalDenied?.();
+        if (denied) throw new IdeError(denied, "denied");
+        return approve(deps, caller(), { investigationId, confirmation }, { clientName: clientName() });
+      }),
   );
 
   server.registerTool(

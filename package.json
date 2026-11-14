@@ -30,7 +30,9 @@
     "pretest": "node scripts/build-connector-registry.mjs",
     "pretypecheck": "node scripts/build-connector-registry.mjs",
     "dev:ide": "node scripts/dev-ide.mjs",
-    "ide:fixture": "tsx scripts/fixture-agent.mts"
+    "ide:fixture": "tsx scripts/fixture-agent.mts",
+    "start:ide-http": "tsx services/mcp/ide-http.ts",
+    "ide:user": "tsx scripts/ide-user.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
