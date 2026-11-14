@@ -75,7 +75,11 @@ export function buildReproduction(spec: DefectSpec, serviceUrl: string, options:
   if (!visits.length) return { ok: false, reason: "The ticket's steps name no page on the service under test, so there is nothing to open. Add the page URLs or paths to the steps." };
 
   const quoted = [spec.actual ?? "", ...spec.errorMessages].flatMap((t) => [...t.matchAll(/["“`]([^"”`]{4,120})["”`]/g)].map((m) => m[1]));
-  const symptomTexts = [...new Set([...spec.errorMessages, ...quoted].map((t) => t.replace(/[.…]+$/, "").trim()).filter((t) => t.length >= 6))].slice(0, 6);
+  const exact = [...spec.errorMessages, ...quoted].map((t) => t.replace(/[.…]+$/, "").trim()).filter((t) => t.length >= 6);
+  // "Network error: Unexpected token" → also "Network error": the label part of a
+  // "Label: detail" message, which the page may show with a different detail.
+  const labels = exact.map((t) => t.match(/^([A-Za-z][A-Za-z ]{6,40}?)\s*[:\-–]\s+\S/)?.[1]?.trim()).filter((t): t is string => !!t && t.split(/\s+/).length >= 2);
+  const symptomTexts = [...new Set([...exact, ...labels])].slice(0, 6);
   for (const t of symptomTexts) basis.push(`Look for the reported text "${t}".`);
   const checkHtmlForData = /unexpected token\s*['"‘’]?</i.test([spec.actual ?? "", ...spec.errorMessages].join(" ")) || /network error/i.test(spec.actual ?? "");
   if (checkHtmlForData) basis.push("Check whether a data request is answered with a web page instead of data (the reported 'Unexpected token <').");

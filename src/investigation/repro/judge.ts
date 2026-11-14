@@ -12,8 +12,8 @@ export type PageObservation = {
   consoleErrors: string[];
   /** fetch/XHR responses that came back as an HTML page. */
   htmlForData: { url: string; status: number; contentType: string }[];
-  /** fetch/XHR responses with HTTP 4xx/5xx. */
-  failedData: { url: string; status: number }[];
+  /** fetch/XHR responses with HTTP 4xx/5xx, or status 0 when the request failed in the network (for example, blocked by CORS). */
+  failedData: { url: string; status: number; error?: string }[];
   /** Visible text of the page, trimmed. */
   text: string;
   /** Visible text without the header, navigation and footer. */
@@ -80,12 +80,15 @@ export function judgeRun(
       });
     }
     if (repro.checkHtmlForData) {
-      const failed = p.failedData.filter((f) => f.status >= 500);
+      const failed = p.failedData.filter((f) => f.status >= 500 || f.status === 0);
+      const cors = p.consoleErrors.find((m) => /CORS policy/i.test(m));
+      const describe = (f: { url: string; status: number; error?: string }) =>
+        `${new URL(f.url).host}${new URL(f.url).pathname} → ${f.status === 0 ? `failed in the network (${f.error ?? "no response"})` : f.status}`;
       assertions.push({
-        name: "Data requests do not fail with a server error",
+        name: "Data requests complete without a server or network error",
         page,
-        expected: "0 data requests answered with HTTP 5xx",
-        actual: failed.length ? `${failed.length}: ${failed.slice(0, 3).map((f) => `${new URL(f.url).host}${new URL(f.url).pathname} → ${f.status}`).join("; ")}` : "0",
+        expected: "0 data requests failed (HTTP 5xx or no response)",
+        actual: failed.length ? `${failed.length}: ${failed.slice(0, 3).map(describe).join("; ")}${cors ? `. Browser: ${cors.slice(0, 220)}` : ""}` : "0",
         passed: failed.length === 0,
         // The reported "Network error" is what a page shows when its data request fails.
         showsDefect: failed.length > 0,

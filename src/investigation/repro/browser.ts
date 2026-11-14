@@ -128,6 +128,14 @@ export async function runOnce(input: {
       if (ct.includes("text/html")) current.htmlForData.push({ url: r.url().slice(0, 300), status: r.status(), contentType: ct.split(";")[0] });
       if (r.status() >= 400) current.failedData.push({ url: r.url().slice(0, 300), status: r.status() });
     });
+    page.on("requestfailed", (r) => {
+      const type = r.resourceType();
+      if (!current || (type !== "fetch" && type !== "xhr")) return;
+      const why = r.failure()?.errorText ?? "failed";
+      // Requests Nexus blocked itself are listed under "blocked", not as site failures.
+      if (/blockedbyclient/i.test(why)) return;
+      current.failedData.push({ url: r.url().slice(0, 300), status: 0, error: why.slice(0, 120) });
+    });
     const navTimeout = Math.min(30_000, input.timeoutMs);
 
     for (const step of input.reproduction.steps) {

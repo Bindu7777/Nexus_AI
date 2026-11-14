@@ -566,10 +566,55 @@ test("browser: signs in, clicks the heart, sends only the one allowed save, and 
     assert.ok(run.blocked.some((b) => b.kind === "write" && b.url.endsWith("/api/liked-vendors/remove-like")), "an unlisted save stays blocked");
     assert.equal(run.reproduced, true);
     const click = run.assertions.filter((a) => a.page.includes('After clicking "Heart"'));
-    assert.ok(click.some((a) => a.showsDefect && a.name === "Data requests do not fail with a server error" && a.actual.includes("/api/liked-vendors/save-like → 500")));
+    assert.ok(click.some((a) => a.showsDefect && a.name === "Data requests complete without a server or network error" && a.actual.includes("/api/liked-vendors/save-like → 500")));
     assert.ok(click.some((a) => a.showsDefect && a.actual.includes("Network error: Unexpected token")));
     assert.ok(run.assertions.some((a) => a.page === "/liked-vendors" && a.showsDefect && a.actual.includes("get-liked-vendors/1 → 500")));
   } finally {
+    site.close();
+  }
+});
+
+test("plan: a 'Label: detail' error also matches its label, so a different detail on the page still counts", () => {
+  const out = buildReproduction(spec, "https://happymomentsindia.com", { login: false });
+  assert.ok(out.ok);
+  if (!out.ok) return;
+  assert.ok(out.reproduction.symptomTexts.includes("Network error"));
+  const r = judgeRun(out.reproduction, [{ url: "https://happymomentsindia.com/liked-vendors", finalUrl: "", status: 200, pageErrors: [], consoleErrors: [], htmlForData: [], failedData: [], text: "Liked Vendors\nNetwork error - please check your connection", error: null }], { loggedIn: true });
+  assert.equal(r.reproduced, true);
+});
+
+test("browser: a cross-origin API whose CORS pre-check crashes is caught as a failed data request", { timeout: 90_000 }, async () => {
+  // The API on another origin answers every request, including the preflight, with a bare 500.
+  const api = http.createServer((_req, res) => {
+    res.writeHead(500, { "content-type": "text/plain" });
+    res.end("A server error has occurred\n\nFUNCTION_INVOCATION_FAILED");
+  });
+  await new Promise<void>((r) => api.listen(0, "127.0.0.1", () => r()));
+  const apiBase = `http://127.0.0.1:${(api.address() as { port: number }).port}`;
+  const site = http.createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(`<!doctype html><html><body><main><h1>Liked Vendors</h1><p id="out"></p></main><script>
+      fetch('${apiBase}/api/liked-vendors/get-liked-vendors/1', { headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json()).catch(() => { document.getElementById('out').textContent = 'Network error - please check your connection'; });
+    </script></body></html>`);
+  });
+  await new Promise<void>((r) => site.listen(0, "localhost", () => r()));
+  const base = `http://localhost:${(site.address() as { port: number }).port}`;
+  try {
+    const plan = buildReproduction({ ...spec, steps: [`Open ${base}/liked-vendors`] }, base, { login: false });
+    assert.ok(plan.ok);
+    const policy = makePolicy({ serviceUrl: base, extraHosts: ["127.0.0.1"], loginAuthPaths: [], maxTotal: 50, maxRps: 20, productionReadOnly: true });
+    const run = await runOnce({ reproduction: plan.ok ? plan.reproduction : null!, policy, login: null, timeoutMs: 45_000, workDir: workDir(), index: 1 });
+    assert.equal(run.error, null);
+    assert.equal(run.reproduced, true);
+    const failed = run.assertions.find((a) => a.name === "Data requests complete without a server or network error");
+    assert.ok(failed?.showsDefect, JSON.stringify(run.assertions));
+    assert.match(failed!.actual, /get-liked-vendors\/1 → failed in the network/);
+    assert.ok(run.assertions.some((a) => a.showsDefect && a.actual === '"Network error" shown'));
+  } finally {
+    api.closeAllConnections();
+    api.close();
+    site.closeAllConnections();
     site.close();
   }
 });
