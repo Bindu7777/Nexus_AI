@@ -8,7 +8,7 @@
   },
   "scripts": {
     "demo": "node scripts/demo.mjs",
-    "dev": "next dev --turbopack -H 0.0.0.0 -p 4317",
+    "dev": "next dev --turbopack -H 127.0.0.1 -p 4317",
     "catalog": "node services/catalog/server.mjs",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 4317",

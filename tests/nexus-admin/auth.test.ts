@@ -136,3 +136,28 @@ test("redaction removes tokens, URL credentials and secret-named fields", () => 
   assert.equal(value.password, "[redacted]");
   assert.deepEqual(value.nested, { apiToken: "[redacted]", ok: "fine" });
 });
+
+test("secrets key: with nothing set, the key file next to the database is used", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const crypto = await import("../../src/nexus-admin/server/crypto.ts");
+  const saved = { db: process.env.NEXUS_ADMIN_DB, key: process.env.NEXUS_SECRETS_KEY, file: process.env.NEXUS_SECRETS_KEY_FILE };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nexus-key-"));
+  try {
+    delete process.env.NEXUS_SECRETS_KEY;
+    delete process.env.NEXUS_SECRETS_KEY_FILE;
+    process.env.NEXUS_ADMIN_DB = path.join(dir, "nexus-admin.sqlite");
+    assert.equal(crypto.defaultKeyFile(), path.join(dir, "secrets.key"));
+    assert.equal(crypto.secretsKeyConfigured(), false, "no key file yet");
+    fs.writeFileSync(path.join(dir, "secrets.key"), crypto.generateKey());
+    assert.equal(crypto.secretsKeyConfigured(), true);
+    const { blob } = crypto.encryptSecret("token-value", "aad:1");
+    assert.equal(crypto.decryptSecret(blob, "aad:1"), "token-value");
+  } finally {
+    for (const [k, v] of [["NEXUS_ADMIN_DB", saved.db], ["NEXUS_SECRETS_KEY", saved.key], ["NEXUS_SECRETS_KEY_FILE", saved.file]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});

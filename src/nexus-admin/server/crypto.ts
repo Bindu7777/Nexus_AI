@@ -1,7 +1,7 @@
 // AES-256-GCM encryption for stored customer secrets.
 //
 // Key: NEXUS_SECRETS_KEY (base64 or hex, 32 bytes) or NEXUS_SECRETS_KEY_FILE
-// (path to a file holding it). For rotation, NEXUS_SECRETS_KEY_PREVIOUS keeps
+// (path to a file holding it), else .data/secrets.key next to the database. For rotation, NEXUS_SECRETS_KEY_PREVIOUS keeps
 // the old key readable until `npm run secrets:rotate` re-encrypts everything.
 //
 // Format: v1.<keyId>.<iv b64>.<tag b64>.<ciphertext b64>
@@ -9,6 +9,7 @@
 // copied onto another company or connection fails to decrypt.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 
 export class SecretsKeyError extends Error {
   constructor(message: string) {
@@ -35,6 +36,12 @@ function parseKey(raw: string | undefined, label: string): Buffer | null {
   return key;
 }
 
+/** The key file kept next to the admin database: .data/secrets.key by default. */
+export function defaultKeyFile() {
+  const db = process.env.NEXUS_ADMIN_DB ?? path.join(process.cwd(), ".data", "nexus-admin.sqlite");
+  return path.join(path.dirname(db), "secrets.key");
+}
+
 function loadCurrentRaw() {
   if (process.env.NEXUS_SECRETS_KEY) return process.env.NEXUS_SECRETS_KEY;
   const file = process.env.NEXUS_SECRETS_KEY_FILE;
@@ -45,7 +52,13 @@ function loadCurrentRaw() {
       throw new SecretsKeyError(`NEXUS_SECRETS_KEY_FILE points to ${file}, which could not be read.`);
     }
   }
-  return undefined;
+  // Nothing set: use the key that travels with the data folder, if it is there,
+  // so a copied project folder opens its saved connectors without extra setup.
+  try {
+    return fs.readFileSync(defaultKeyFile(), "utf8");
+  } catch {
+    return undefined;
+  }
 }
 
 const keyId = (key: Buffer) => createHash("sha256").update(key).digest("hex").slice(0, 8);
