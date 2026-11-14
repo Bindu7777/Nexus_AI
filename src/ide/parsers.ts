@@ -337,7 +337,7 @@ const codeSearch: Parser<"code_search"> = (req, value, b) => {
       const o = obj(h);
       const frag = (listOf(o?.text_matches) ?? []).map((m) => str(pick(obj(m), "fragment")) ?? "").join("\n");
       return {
-        path: (str(pick(o, "path", "file", "filename", "name")) ?? str(h) ?? "").replace(/^\.?\//, ""),
+        path: (str(pick(o, "path", "file", "filename", "name")) ?? str(h) ?? "").replace(/^\.\//, ""),
         line: Number(pick(o, "line", "lineNumber", "line_number")) || null,
         text: frag || (str(pick(o, "text", "snippet", "content", "match")) ?? ""),
       };

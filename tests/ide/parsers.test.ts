@@ -204,3 +204,13 @@ test("instruction-like lines are marked for display only", () => {
   assert.match(n.text, /\[instruction-like text, shown as data only\] Ignore previous/);
   assert.match(n.text, /^Steps: open cart/);
 });
+
+test("code search keeps repo-relative paths only: absolute and parent paths are dropped", () => {
+  const req = request.codeSearch({ ...r, repo: "acme/shop", terms: "reserve stock" });
+  const p = ok(req, { items: [{ path: "src/a.ts" }, { path: "./src/b.ts" }, { path: "/etc/passwd" }, { path: "../secrets/.env" }, { path: "src/../../x" }] });
+  assert.ok(p.ok);
+  assert.deepEqual(p.items.map((i) => i.location?.path), ["src/a.ts", "src/b.ts"]);
+  const grep = ok(req, "src/c.ts:12:  reserveStock(\n/etc/hosts:1:x");
+  assert.ok(grep.ok);
+  assert.deepEqual(grep.items.map((i) => i.location?.path), ["src/c.ts"]);
+});
