@@ -140,6 +140,52 @@ export function requestSearchTerms(urls: string[]): string[] {
   return out.slice(0, 4);
 }
 
+const CODE_FILE = /\.(js|jsx|ts|tsx|mjs|cjs|py|rb|go|java|kt|cs|php|vue|svelte)$/i;
+const SKIP_DIR = /(^|\/)(node_modules|dist|build|\.next|vendor|coverage)\//;
+const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Without a search index: pick code files whose name matches a term
+ * ("liked-vendors" → likedVendors.js, LikedVendors.tsx), read them, and point at
+ * the first line that contains a term, most specific term first. Read-only.
+ */
+export async function findInTree(gh: Pick<GitHubConnector, "repos" | "listTree" | "readFile">, terms: string[]): Promise<EvidenceItem[]> {
+  const keys = terms.map(squash).filter((k) => k.length >= 4);
+  const out: EvidenceItem[] = [];
+  for (const repo of gh.repos.slice(0, 3)) {
+    const name = `${repo.owner}/${repo.repo}`;
+    const tree = await gh.listTree(name);
+    const candidates = tree.paths
+      .filter((p) => CODE_FILE.test(p) && !SKIP_DIR.test(p))
+      .map((p) => {
+        const base = squash(p.split("/").pop()!.replace(/\.[^.]+$/, ""));
+        const score = keys.reduce((best, k) => Math.max(best, base === k ? 3 : base.startsWith(k) ? 2 : base.includes(k) ? 1 : 0), 0);
+        return { p, score };
+      })
+      .filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score || a.p.length - b.p.length)
+      .slice(0, 4);
+    for (const { p } of candidates) {
+      const whole = await gh.readFile(name, p, { revision: tree.revision });
+      const lines = (whole.excerpt ?? "").split("\n");
+      let hit: { term: string; line: number } | null = null;
+      for (const term of terms) {
+        const i = lines.findIndex((l) => l.toLowerCase().includes(term.toLowerCase()));
+        if (i >= 0) {
+          hit = { term, line: i + 1 };
+          break;
+        }
+      }
+      if (!hit) continue;
+      const start = Math.max(1, hit.line - 3);
+      const window = await gh.readFile(name, p, { revision: tree.revision, startLine: start, endLine: hit.line + 12 });
+      out.push({ ...window, meta: { ...window.meta, matchedTerm: hit.term, matchedFrom: "reproduction", matchedBy: "file-list", matchLine: hit.line } });
+      if (out.length >= 5) return out;
+    }
+  }
+  return out;
+}
+
 /** Page paths named in the steps: URL paths and bare paths such as /liked-vendors. */
 export function stepPaths(steps: string[]): string[] {
   const out = new Set<string>();
@@ -377,12 +423,20 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
             found.push(...(await gh.listCommits(`${repo.owner}/${repo.repo}`, { since: fromIso, limit: 10 })));
           }
         }
+        let fromRepro = 0;
         for (const t of reproTerms.slice(0, 3)) {
           try {
-            found.push(...(await c.search({ text: t, limit: 5 })).map((e) => ({ ...e, meta: { ...e.meta, matchedTerm: t, matchedFrom: "reproduction" } })));
-          } catch (error) {
-            if (!found.length) throw error;
+            const hits = (await c.search({ text: t, limit: 5 })).map((e) => ({ ...e, meta: { ...e.meta, matchedTerm: t, matchedFrom: "reproduction" } }));
+            fromRepro += hits.length;
+            found.push(...hits);
+          } catch {
+            // GitHub code search can fail or lag; the file-list fallback below covers it.
           }
+        }
+        // GitHub's code search often has not indexed a new or recently pushed
+        // repository. Fall back to the file list, which is always current.
+        if (!fromRepro && reproTerms.length && typeof gh.listTree === "function" && typeof gh.readFile === "function" && Array.isArray(gh.repos)) {
+          found.push(...(await findInTree(gh as GitHubConnector, reproTerms)));
         }
         for (const t of terms.slice(0, 3)) {
           try {
@@ -456,7 +510,9 @@ export async function runPipeline(deps: PipelineDeps): Promise<PipelineResult> {
         endLine: e.location?.endLine ?? null,
         reason: term
           ? e.meta?.matchedFrom === "reproduction"
-            ? `Code search matched "${term}", from the request that failed while reproducing.`
+            ? e.meta?.matchedBy === "file-list"
+              ? `"${term}" is in this file (line ${String(e.meta?.matchLine ?? e.location?.startLine ?? "?")}), whose name matches the request that failed while reproducing.`
+              : `Code search matched "${term}", from the request that failed while reproducing.`
             : `Code search matched "${term}" from the ticket.`
           : "Named in the ticket.",
         ref: e.ref,

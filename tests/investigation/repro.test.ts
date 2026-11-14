@@ -711,3 +711,34 @@ test("pipeline: Locate searches the code for the request that failed while repro
   const site = res.report.sources.find((s) => s.name === "HappyMoments website");
   assert.equal(site?.message, "Used by the Reproduce step (see above), not searched for evidence.");
 });
+
+test("locate: without a search index, file names and lines lead to the route", async () => {
+  const { findInTree } = await import("../../src/investigation/pipeline.ts");
+  const files: Record<string, string> = {
+    "backend/routes/likedVendors.js": "const express = require('express');\nconst router = express.Router();\nrouter.post('/save-like', h);\n" + "\n".repeat(5) + "router.get('/get-liked-vendors/:customer_id', h);\n",
+    "frontend/src/services/likedVendorsApiService.ts": "const API = `${base}/api/liked-vendors`;\nexport const getLikedVendors = (id) => fetch(`${API}/get-liked-vendors/${id}`);\n",
+    "migrations/fix_liked_vendors_table.sql": "create table liked_vendors();",
+    "node_modules/liked-vendors/index.js": "x",
+    "backend/server.js": "app.use('/api/liked-vendors', likedVendorsRoutes);",
+  };
+  const read: string[] = [];
+  const gh = {
+    repos: [{ owner: "o", repo: "r" }],
+    async listTree() {
+      return { revision: "main", paths: Object.keys(files), truncated: false };
+    },
+    async readFile(_repo: string, p: string, o: { startLine?: number; endLine?: number } = {}) {
+      read.push(p);
+      const lines = files[p].split("\n");
+      const start = o.startLine ?? 1;
+      const end = Math.min(lines.length, o.endLine ?? lines.length);
+      return { source: "github", kind: "code" as const, ref: `github:file:o/r@main:${p}#L${start}-L${end}`, timestamp: null, retrievedAt: "", title: p, excerpt: lines.slice(start - 1, end).join("\n"), observation: "observed" as const, location: { path: p, startLine: start, endLine: end } };
+    },
+  };
+  const out = await findInTree(gh as never, ["get-liked-vendors", "liked-vendors"]);
+  assert.deepEqual(out.map((e) => [e.location?.path, e.meta?.matchedTerm, e.meta?.matchLine]), [
+    ["backend/routes/likedVendors.js", "get-liked-vendors", 9],
+    ["frontend/src/services/likedVendorsApiService.ts", "get-liked-vendors", 2],
+  ]);
+  assert.ok(!read.some((p) => p.startsWith("node_modules") || p.endsWith(".sql")), "skips dependencies and non-code files");
+});
