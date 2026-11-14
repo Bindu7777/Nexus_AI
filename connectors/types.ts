@@ -35,8 +35,22 @@ export type EvidenceItem = {
   location?: { path?: string; startLine?: number; endLine?: number; url?: string; revision?: string };
   /** Set when an excerpt holds sampled row data. Reports must hide it unless sampling is reportable. */
   containsSampledData?: boolean;
+  /**
+   * Who produced it. "client-supplied": passed in by the engineer's IDE agent;
+   * "nexus-fetched": read by Nexus itself through a configured connector;
+   * "nexus-executed": produced by Nexus running something in its own sandbox.
+   * Unset means the pre-provenance default (see provenanceOf).
+   */
+  provenance?: Provenance;
   meta?: Record<string, unknown>;
 };
+
+export type Provenance = "client-supplied" | "nexus-fetched" | "nexus-executed";
+
+/** Provenance with the default for items made before the field existed: sandbox runs are executed, the rest fetched. */
+export function provenanceOf(item: Pick<EvidenceItem, "provenance" | "kind">): Provenance {
+  return item.provenance ?? (item.kind === "sandbox" ? "nexus-executed" : "nexus-fetched");
+}
 
 export type ConnectorTestResult = {
   ok: boolean;

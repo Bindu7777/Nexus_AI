@@ -46,7 +46,12 @@ export async function readJiraTicket(ctx: ConnectorContext, key: string): Promis
   }
   if (res.status === 404) return { ok: false, reason: "not-found", message: `${key} was not found in Jira, or this account cannot see it.` };
   if (res.status >= 400 || !res.data) return { ok: false, reason: "error", message: `Jira answered HTTP ${res.status} when reading ${key}.` };
-  const f = res.data.fields ?? {};
+  return { ok: true, ticket: jiraIssueToTicket(res.data, base, key) };
+}
+
+/** One Jira issue (REST v2 or v3 JSON, as {key, fields}) as a TicketFull. Pure: no request is made. */
+export function jiraIssueToTicket(data: { key?: string; fields?: Record<string, unknown> }, base: string, key: string): TicketFull {
+  const f = data.fields ?? {};
   const named = (v: unknown) => (Array.isArray(v) ? v.map((x) => String((x as { name?: string })?.name ?? "")).filter(Boolean) : []);
   const comments = ((f.comment as { comments?: unknown[] } | undefined)?.comments ?? []).slice(-20).map((c) => {
     const cc = c as { author?: { displayName?: string }; body?: unknown; created?: string };
@@ -58,25 +63,22 @@ export async function readJiraTicket(ctx: ConnectorContext, key: string): Promis
     return { relation: (ll.outwardIssue ? ll.type?.outward : ll.type?.inward) ?? "relates to", key: issue?.key ?? "", title: issue?.fields?.summary ?? "" };
   });
   return {
-    ok: true,
-    ticket: {
-      key: res.data.key ?? key,
-      source: "jira",
-      title: String(f.summary ?? "").trim(),
-      description: text(f.description),
-      status: (f.status as { name?: string } | undefined)?.name ?? null,
-      priority: (f.priority as { name?: string } | undefined)?.name ?? null,
-      labels: Array.isArray(f.labels) ? (f.labels as unknown[]).map(String) : [],
-      components: named(f.components),
-      environment: text(f.environment) || null,
-      versions: named(f.versions),
-      createdAt: typeof f.created === "string" ? f.created : null,
-      updatedAt: typeof f.updated === "string" ? f.updated : null,
-      comments,
-      links: links.filter((l) => l.key),
-      attachments: ((f.attachment as unknown[]) ?? []).map((a) => String((a as { filename?: string })?.filename ?? "")).filter(Boolean).slice(0, 30),
-      url: `${base}/browse/${encodeURIComponent(res.data.key ?? key)}`,
-    },
+    key: data.key ?? key,
+    source: "jira",
+    title: String(f.summary ?? "").trim(),
+    description: text(f.description),
+    status: (f.status as { name?: string } | undefined)?.name ?? null,
+    priority: (f.priority as { name?: string } | undefined)?.name ?? null,
+    labels: Array.isArray(f.labels) ? (f.labels as unknown[]).map(String) : [],
+    components: named(f.components),
+    environment: text(f.environment) || null,
+    versions: named(f.versions),
+    createdAt: typeof f.created === "string" ? f.created : null,
+    updatedAt: typeof f.updated === "string" ? f.updated : null,
+    comments,
+    links: links.filter((l) => l.key),
+    attachments: ((f.attachment as unknown[]) ?? []).map((a) => String((a as { filename?: string })?.filename ?? "")).filter(Boolean).slice(0, 30),
+    url: base ? `${base}/browse/${encodeURIComponent(data.key ?? key)}` : null,
   };
 }
 
