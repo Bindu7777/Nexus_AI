@@ -1,0 +1,62 @@
+{
+  "name": "vscode-nexus",
+  "displayName": "Nexus: defect investigation",
+  "description": "Investigate a defect without leaving the editor. Nexus decides what evidence is needed and what it means; your IDE agent fetches it with your own connected tools. Read-only toward your repository.",
+  "version": "0.2.0",
+  "publisher": "nexus-intelligence",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["Debuggers", "AI", "Chat"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "nexus.investigate", "title": "Nexus: Investigate defect", "icon": "$(beaker)" },
+      { "command": "nexus.openReport", "title": "Nexus: Open report" },
+      { "command": "nexus.showProgress", "title": "Nexus: Show progress" },
+      { "command": "nexus.refreshHistory", "title": "Nexus: Refresh history", "icon": "$(refresh)" },
+      { "command": "nexus.signOut", "title": "Nexus: Sign out of the Nexus server" }
+    ],
+    "menus": {
+      "editor/context": [{ "command": "nexus.investigate", "when": "editorHasSelection", "group": "navigation@90" }],
+      "view/title": [
+        { "command": "nexus.investigate", "when": "view == nexus.progress", "group": "navigation" },
+        { "command": "nexus.refreshHistory", "when": "view == nexus.history", "group": "navigation" }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [{ "id": "nexus", "title": "Nexus", "icon": "media/nexus.svg" }]
+    },
+    "views": {
+      "nexus": [
+        { "id": "nexus.progress", "name": "Investigation", "type": "webview" },
+        { "id": "nexus.history", "name": "Recent investigations" }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "nexus.engineer",
+        "name": "nexus",
+        "fullName": "Nexus",
+        "description": "Investigate a defect with your connected tools. Nexus decides; your agent only fetches evidence.",
+        "isSticky": false,
+        "commands": [{ "name": "investigate", "description": "Investigate a defect, for example /investigate PAY-1423" }]
+      }
+    ],
+    "configuration": {
+      "title": "Nexus",
+      "properties": {
+        "nexus.server.mode": { "type": "string", "enum": ["stdio", "http"], "default": "stdio", "description": "stdio: start a local Nexus server. http: connect to a Nexus server inside your company's network." },
+        "nexus.server.command": { "type": "string", "default": "npm", "description": "stdio mode: command that starts the Nexus MCP server." },
+        "nexus.server.args": { "type": "array", "items": { "type": "string" }, "default": ["run", "--silent", "dev:ide"], "description": "stdio mode: arguments. Use the same command as your IDE's mcp.json entry, so both share one Nexus data folder." },
+        "nexus.server.cwd": { "type": "string", "default": "${workspaceFolder}", "description": "stdio mode: working folder." },
+        "nexus.server.env": { "type": "object", "default": {}, "additionalProperties": { "type": "string" }, "description": "stdio mode: extra environment, for example NEXUS_IDE_DB. Never put Jira, GitHub or database credentials here: Nexus does not use them." },
+        "nexus.server.url": { "type": "string", "default": "http://127.0.0.1:4320/mcp", "description": "http mode: the Nexus MCP endpoint." },
+        "nexus.server.callbackPort": { "type": "number", "default": 37941, "description": "http mode: loopback port for the Nexus sign-in redirect." },
+        "nexus.repositories": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Repositories in owner/name form. Empty: taken from the workspace's GitHub remote." },
+        "nexus.hideEvidenceExcerpts": { "type": "boolean", "default": false, "description": "Hide evidence excerpts in the report and hovers, for screenshots and screen sharing." }
+      }
+    }
+  }
+}

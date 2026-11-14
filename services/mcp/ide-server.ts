@@ -17,6 +17,7 @@ import {
   capabilities,
   feedback,
   getReport,
+  recordExport,
   getStatus,
   IdeError,
   listInvestigations,
@@ -41,6 +42,7 @@ export const IDE_TOOL_NAMES = [
   "nexus_reject",
   "nexus_cancel",
   "nexus_feedback",
+  "nexus_record_export",
 ] as const;
 
 export const INVESTIGATE_PROMPT = [
@@ -200,6 +202,17 @@ export function createIdeMcpServer(deps: IdeDeps, caller: () => Caller, options:
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     async (args) => guarded(() => feedback(deps, caller(), args)),
+  );
+
+  server.registerTool(
+    "nexus_record_export",
+    {
+      title: "Record a patch export",
+      description: "Audit only. The Nexus extension records that the engineer saved, copied or applied the proven patch in their own editor. Nexus itself never writes to the repository.",
+      inputSchema: { investigationId: z.string().max(80), action: z.enum(["save", "copy", "apply_to_working_tree"]) },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async (args) => guarded(() => recordExport(deps, caller(), args)),
   );
 
   server.registerPrompt(

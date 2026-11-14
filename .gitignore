@@ -52,3 +52,5 @@ yarn-error.log*
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+/extensions/vscode-nexus/dist
+*.vsix

@@ -13,7 +13,7 @@ import { ACME, connect, deps, fixture, freePort, tempStore } from "./helpers.ts"
 type R = {
   verdict: string;
   causes: { detectorId: string; cause: string; facts: Record<string, unknown>; evidence: { provenance: string }[] }[];
-  suggestedFix: { title: string } | null;
+  suggestedFix: { title: string; diff: string | null; exportable: boolean } | null;
   validation: { status: string; statement: string; before: unknown; after: unknown };
   missingInformation: string[];
 };
@@ -76,6 +76,11 @@ test("NEX-5 end to end: lock contention, then approval and sandbox proof give Di
   assert.equal(f.report.suggestedFix.title, g.proposal.proposal.title);
   assert.ok(f.report.causes[0].evidence.every((e: { provenance: string }) => e.provenance === "nexus-executed"));
   assert.equal(f.report.validation.status, "not_validated");
+  // The diff is there to read before approving, but cannot be exported yet.
+  assert.match(f.report.suggestedFix.diff ?? "", /^--- a\/services\/catalog\/server\.mjs/);
+  assert.equal(f.report.suggestedFix.exportable, false);
+  const early = await agent.call("nexus_record_export", { investigationId, action: "save" });
+  assert.equal(early.__error, true);
 
   // The IDE agent cannot approve, even with the right phrase.
   const byAgent = await agent.call("nexus_approve", { investigationId, confirmation: CONFIRMATION_PHRASE });
@@ -95,8 +100,10 @@ test("NEX-5 end to end: lock contention, then approval and sandbox proof give Di
   assert.equal(ok.report.validation.status, "validated");
   assert.equal(ok.report.validation.statement, g.validation.statement);
   assert.ok(ok.report.validation.before && ok.report.validation.after);
+  assert.equal(ok.report.suggestedFix.exportable, true, "exportable only after the sandbox proof");
+  assert.equal((await ext.call("nexus_record_export", { investigationId, action: "apply_to_working_tree" })).status, "recorded");
   const audit = store.auditFor(ACME, investigationId).map((a) => a.action);
-  for (const a of ["investigation.start", "evidence.round", "approval.denied", "approval.approved"]) assert.ok(audit.includes(a), a);
+  for (const a of ["investigation.start", "evidence.round", "approval.denied", "approval.approved", "patch.export"]) assert.ok(audit.includes(a), a);
 });
 
 test("approval cannot arrive together with an evidence submission", { timeout: 120_000 }, async () => {

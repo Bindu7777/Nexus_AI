@@ -32,7 +32,9 @@
     "dev:ide": "node scripts/dev-ide.mjs",
     "ide:fixture": "tsx scripts/fixture-agent.mts",
     "start:ide-http": "tsx services/mcp/ide-http.ts",
-    "ide:user": "tsx scripts/ide-user.mts"
+    "ide:user": "tsx scripts/ide-user.mts",
+    "ide-extension:build": "node scripts/build-ide-extension.mjs",
+    "ide-extension:typecheck": "tsc --noEmit -p extensions/vscode-nexus"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

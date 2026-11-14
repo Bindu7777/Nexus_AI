@@ -18,7 +18,7 @@ import { VERDICTS, type DetectorContext, type LoadMeasurements, type Verdict } f
 import type { EngineTicket } from "../lib/types";
 import { parseResult, type TicketExtra } from "./parsers";
 import { EVIDENCE_REQUEST_KINDS, InvalidRequestValue, isRepo, isTicketKey, LIMITS, request, type EvidenceRequest, type EvidenceRequestKind } from "./requests";
-import { isDemoKey, SEEDED_TICKET, type Sandbox, type SandboxSnapshot } from "./sandbox-demo";
+import { isDemoKey, SEEDED_TICKET, type Sandbox, type SandboxSnapshot, type SuggestedPatch } from "./sandbox-demo";
 import type { Caller, IdeStore } from "./store";
 
 // ---------- state ----------
@@ -59,7 +59,7 @@ export type IdeState = {
   findings: RankedFinding[];
   detectors: Pick<DetectorRun, "detectorId" | "name" | "status" | "reason">[];
   couldNotVerify: string[];
-  demo: { scenario: string | null; snapshot: SandboxSnapshot | null; engineAsk: string | null } | null;
+  demo: { scenario: string | null; snapshot: SandboxSnapshot | null; engineAsk: string | null; patch?: SuggestedPatch | null } | null;
   verdict: Verdict | null;
   reason: string | null;
   approval: { status: "not_applicable" | "awaiting" | "approved" | "rejected"; at: string | null; reason: string | null };
@@ -101,7 +101,18 @@ export type IdeReport = {
   couldNotVerify: string[];
   whatWouldHelp: string[];
   gaps: { requestId: string; kind: string; required: boolean; reason: string }[];
-  suggestedFix: { title: string; summary: string; change: string; boundary: string; diff: string | null } | null;
+  suggestedFix: {
+    title: string;
+    summary: string;
+    change: string;
+    boundary: string;
+    /** Unified diff against the engineer's working tree, or null when no code change is drafted. */
+    diff: string | null;
+    path: string | null;
+    sha256Before: string | null;
+    /** True once Nexus's sandbox proof passed: only then may the patch be saved, copied or applied. */
+    exportable: boolean;
+  } | null;
   validation: IdeState["validation"];
   approval: IdeState["approval"];
   provenanceNote: string | null;
@@ -497,6 +508,17 @@ export function feedback(deps: IdeDeps, caller: Caller, input: { investigationId
   return { status: "recorded" as const };
 }
 
+/** Audit only: the engineer saved, copied or applied the proven patch in their own editor. */
+export function recordExport(deps: IdeDeps, caller: Caller, input: { investigationId: string; action: unknown }) {
+  const state = loadState(deps, caller, input.investigationId);
+  const action = input.action;
+  if (action !== "save" && action !== "copy" && action !== "apply_to_working_tree") throw new IdeError("Action must be save, copy or apply_to_working_tree.", "invalid");
+  const fix = report(deps, caller, state).suggestedFix;
+  if (!fix?.exportable) throw new IdeError("The patch can be exported only after it was approved and proven in Nexus's sandbox.", "conflict");
+  deps.store.audit(caller, "patch.export", { ticketKey: state.ticketKey, investigationId: state.id, detail: { action, path: fix.path, sha256Before: fix.sha256Before } });
+  return { status: "recorded" as const };
+}
+
 // ---------- the provenance rule ----------
 
 /**
@@ -804,7 +826,8 @@ async function demoPath(deps: IdeDeps, caller: Caller, state: IdeState, t: Engin
   const proposal = m.snapshot.run.diagnosis?.proposal ?? null;
   if (causes.length && proposal) {
     startStage(deps, state, "propose");
-    finishStage(deps, state, "propose", "done", `${proposal.title}. Not applied.`);
+    state.demo.patch = deps.sandbox!.patch();
+    finishStage(deps, state, "propose", "done", `${proposal.title}. ${state.demo.patch ? `A patch to ${state.demo.patch.path} is drafted.` : "No code patch is drafted."} Not applied.`);
     setVerdict(state, "diagnosed", `${causes[0].cause}. No fix has been proven yet.`);
     state.approval = { status: "awaiting", at: null, reason: null };
     state.phase = "awaiting_approval";
@@ -898,7 +921,19 @@ function report(deps: IdeDeps, caller: Caller, state: IdeState): IdeReport {
     couldNotVerify: [...new Set(state.couldNotVerify)],
     whatWouldHelp: [...help],
     gaps,
-    suggestedFix: proposal && state.approval.status !== "not_applicable" ? { title: proposal.title, summary: proposal.summary, change: proposal.sandboxChange, boundary: proposal.boundary, diff: null } : null,
+    suggestedFix:
+      proposal && state.approval.status !== "not_applicable"
+        ? {
+            title: proposal.title,
+            summary: proposal.summary,
+            change: proposal.sandboxChange,
+            boundary: proposal.boundary,
+            diff: state.demo?.patch?.diff ?? null,
+            path: state.demo?.patch?.path ?? null,
+            sha256Before: state.demo?.patch?.sha256Before ?? null,
+            exportable: state.approval.status === "approved" && state.validation.status === "validated" && Boolean(state.demo?.patch),
+          }
+        : null,
     validation: state.validation,
     approval: state.approval,
     provenanceNote,

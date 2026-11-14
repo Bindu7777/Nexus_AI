@@ -6,6 +6,8 @@
 // does, minus the server-side Jira read: in IDE mode the ticket comes from the
 // engineer's own ticket tool. No engine rule, threshold or wording changes.
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import type { EvidenceItem } from "../../connectors/types";
 import { engineRunEvidence, loadMeasurementsFromRun } from "../investigation/engine-adapter";
@@ -31,6 +33,8 @@ export type DemoMeasurement = {
 };
 
 export interface Sandbox {
+  /** The code change behind a proposal, when this sandbox has one. */
+  patch(): SuggestedPatch | null;
   /** The engine's view of a ticket when it belongs to the demo, else null. */
   engineTicket(key: string, ticket: TicketFull | null, extra?: TicketExtra | null): Promise<EngineTicket | null>;
   measure(ticket: EngineTicket): Promise<DemoMeasurement>;
@@ -39,6 +43,43 @@ export interface Sandbox {
     | { ok: true; snapshot: SandboxSnapshot; evidence: EvidenceItem[] }
     | { ok: false; message: string; snapshot: SandboxSnapshot }
   >;
+}
+
+/** A suggested code change as a unified diff against one file in the engineer's repository. */
+export type SuggestedPatch = { path: string; diff: string; sha256Before: string };
+
+const CATALOG = "services/catalog/server.mjs";
+const DEFECT_LINE = '    return { workPlacement: "inside-lock", unavailable: false };';
+
+/**
+ * The code change behind the engine's proposal, as a patch. The sandbox proves
+ * it by running the catalog in remediated mode, which uses exactly this
+ * placement (the slow read after the exclusive lock is released).
+ */
+export function demoPatch(projectRoot: string): SuggestedPatch | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(projectRoot, CATALOG), "utf8");
+  } catch {
+    return null;
+  }
+  const lines = text.split("\n");
+  const at = lines.indexOf(DEFECT_LINE);
+  if (at < 0 || !lines[at - 1]?.includes('mode === "incident"')) return null;
+  const replacement = ["    // Do the slow read after the exclusive lock is released, so overlapping", "    // callers no longer wait for each other's read.", '    return { workPlacement: "outside-lock", unavailable: false };'];
+  const from = Math.max(0, at - 3);
+  const to = Math.min(lines.length, at + 4);
+  const before = lines.slice(from, at);
+  const after = lines.slice(at + 1, to);
+  const hunk = [
+    `@@ -${from + 1},${before.length + 1 + after.length} +${from + 1},${before.length + replacement.length + after.length} @@`,
+    ...before.map((l) => ` ${l}`),
+    `-${DEFECT_LINE}`,
+    ...replacement.map((l) => `+${l}`),
+    ...after.map((l) => ` ${l}`),
+  ];
+  const diff = [`--- a/${CATALOG}`, `+++ b/${CATALOG}`, ...hunk, ""].join("\n");
+  return { path: CATALOG, diff, sha256Before: createHash("sha256").update(text).digest("hex") };
 }
 
 export const isDemoKey = (key: string) => key === SEEDED_TICKET || DEMO_KEY.test(key);
@@ -95,6 +136,7 @@ export async function ensureCatalog(url: string, projectRoot: string) {
 export function createDemoSandbox(options: { catalogUrl: string; projectRoot: string; autoStart?: boolean }): Sandbox {
   const { catalogUrl, projectRoot } = options;
   return {
+    patch: () => demoPatch(projectRoot),
     async engineTicket(key, ticket, extra) {
       if (key === SEEDED_TICKET) return resolveTicket(SEEDED_TICKET, {});
       if (!DEMO_KEY.test(key) || !ticket) return null;
