@@ -1,0 +1,152 @@
+{
+  "ticket": {
+    "id": "NEX-6",
+    "source": "jira",
+    "kind": "Jira issue",
+    "title": "Catalog returns 503 for all product pages",
+    "service": "Jira NEX",
+    "openedAt": "2026-11-01T10:05:00.000+0530",
+    "severity": "Highest",
+    "reporter": "Demo reporter",
+    "symptom": "Simulated sandbox data. Expected agent outcome: abstain and escalate the outage. No customer trace is attached.",
+    "ask": "Investigate from sandbox measurements. Do not treat the Jira text as measurement evidence.",
+    "disclaimer": "Read from Jira https://nexusintelligence.atlassian.net. This adapter only sends HTTP GET. It does not write to Jira. The Jira label nexus-demo is present, so this text is simulated sandbox data, not a customer incident. Matching sandbox scenario: outage. The rules must abstain from a lock finding when the catalog returns 503.",
+    "issueType": "Defect test",
+    "projectKey": "NEX",
+    "detail": "sufficient",
+    "fallback": "none",
+    "sandboxScenario": "outage",
+    "labels": [
+      "nexus-demo"
+    ],
+    "readOnly": true
+  },
+  "summaries": {
+    "outage": {
+      "requests": 8,
+      "success": 0,
+      "errors": 8,
+      "timeouts": 0,
+      "latencyMs": {
+        "count": 8,
+        "min": 1.02,
+        "p50": 2.06,
+        "p95": 3.41,
+        "max": 3.41,
+        "mean": 2.25
+      },
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "maxQueueDepth": null
+    }
+  },
+  "diagnosis": {
+    "method": "rule-based-sandbox",
+    "methodLabel": "Rule-based sandbox demonstration — not live model inference",
+    "rulesModule": "src/lib/diagnosis.ts",
+    "outcome": "service_unavailable",
+    "title": "Catalog did not serve the collection load",
+    "summary": "The outage control put the local catalog into unavailable mode, then the demo issued 8 requests, concurrency 4, client timeout 2000 ms, scheduled read 80 ms. 8 of 8 requests failed. This is a sandbox fault you armed, not a lock-contention diagnosis.",
+    "rules": [
+      {
+        "id": "service_responding",
+        "title": "Enough requests succeed to judge the lock",
+        "fired": false,
+        "threshold": "Fewer than 80% of incident requests fail",
+        "observed": "8 of 8 requests failed (0 timeouts)."
+      },
+      {
+        "id": "exclusive_lock_wait",
+        "title": "Incident lock wait is materially above baseline",
+        "fired": false,
+        "threshold": "Not applied when the service is mostly failing",
+        "observed": "Lock-contention rules were not applied."
+      }
+    ],
+    "citations": [
+      {
+        "evidenceId": "metric:run_golden_NEX-6:incident",
+        "reason": "Aggregate of the requests issued while the catalog was unavailable."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-6:log_1",
+        "reason": "Request orion-90 ended with catalog_unavailable."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-6:log_2",
+        "reason": "Request brass-sextant ended with catalog_unavailable."
+      }
+    ],
+    "uncertainties": [
+      "This diagnosis is a deterministic rule set in src/lib/diagnosis.ts. No language model was called, and no model credential is configured.",
+      "The ticket shown beside this run is a seeded example. It did not arrive from Jira or any other tracker.",
+      "Every latency, lock-wait, queue, log, and trace figure is from this local catalog process on this run. None of them is a production SLO, a customer impact number, or a savings claim.",
+      "The catalog is a small original sandbox. The OpenTelemetry Astronomy Shop is not running, and these traces were not imported from it.",
+      "The slow read is a timer inside this process. It stands in for an expensive critical section. It is not a profiler capture from a customer system.",
+      "A lock-contention finding would be the wrong conclusion while the process is refusing or dropping most calls. No remediation is proposed."
+    ],
+    "proposal": null
+  },
+  "view": {
+    "method": "rule-based-sandbox",
+    "outcome": "service_unavailable",
+    "hypothesis": "The outage control put the local catalog into unavailable mode, then the demo issued 8 requests, concurrency 4, client timeout 2000 ms, scheduled read 80 ms. 8 of 8 requests failed. This is a sandbox fault you armed, not a lock-contention diagnosis.",
+    "evidence": [
+      {
+        "evidenceId": "metric:run_golden_NEX-6:incident",
+        "reason": "Aggregate of the requests issued while the catalog was unavailable."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-6:log_1",
+        "reason": "Request orion-90 ended with catalog_unavailable."
+      },
+      {
+        "evidenceId": "log:run_golden_NEX-6:log_2",
+        "reason": "Request brass-sextant ended with catalog_unavailable."
+      }
+    ],
+    "confidence": "none",
+    "abstain": true,
+    "abstainReason": "The outage control put the local catalog into unavailable mode, then the demo issued 8 requests, concurrency 4, client timeout 2000 ms, scheduled read 80 ms. 8 of 8 requests failed. This is a sandbox fault you armed, not a lock-contention diagnosis.",
+    "rules": [
+      {
+        "id": "service_responding",
+        "title": "Enough requests succeed to judge the lock",
+        "fired": false,
+        "threshold": "Fewer than 80% of incident requests fail",
+        "observed": "8 of 8 requests failed (0 timeouts)."
+      },
+      {
+        "id": "exclusive_lock_wait",
+        "title": "Incident lock wait is materially above baseline",
+        "fired": false,
+        "threshold": "Not applied when the service is mostly failing",
+        "observed": "Lock-contention rules were not applied."
+      }
+    ],
+    "uncertainties": [
+      "This diagnosis is a deterministic rule set in src/lib/diagnosis.ts. No language model was called, and no model credential is configured.",
+      "The ticket shown beside this run is a seeded example. It did not arrive from Jira or any other tracker.",
+      "Every latency, lock-wait, queue, log, and trace figure is from this local catalog process on this run. None of them is a production SLO, a customer impact number, or a savings claim.",
+      "The catalog is a small original sandbox. The OpenTelemetry Astronomy Shop is not running, and these traces were not imported from it.",
+      "The slow read is a timer inside this process. It stands in for an expensive critical section. It is not a profiler capture from a customer system.",
+      "A lock-contention finding would be the wrong conclusion while the process is refusing or dropping most calls. No remediation is proposed."
+    ],
+    "proposal": null,
+    "ticketNote": null,
+    "sandboxOnly": true
+  },
+  "proposal": {
+    "ok": true,
+    "message": "The outage control put the local catalog into unavailable mode, then the demo issued 8 requests, concurrency 4, client timeout 2000 ms, scheduled read 80 ms. 8 of 8 requests failed. This is a sandbox fault you armed, not a lock-contention diagnosis.",
+    "proposal": null,
+    "labeledFallback": false
+  },
+  "gate": {
+    "approvalPhrase": {
+      "ok": false,
+      "status": 409,
+      "message": "This outcome has no sandbox remediation to apply."
+    }
+  }
+}

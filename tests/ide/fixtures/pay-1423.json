@@ -1,0 +1,105 @@
+{
+  "ticketRef": "PAY-1423",
+  "capabilities": [
+    "ticket",
+    "commits",
+    "code_search",
+    "file",
+    "docs",
+    "logs"
+  ],
+  "repos": [
+    "acme/shop"
+  ],
+  "results": {
+    "ticket": {
+      "tool": "jira_get_issue",
+      "output": "{\"key\": \"PAY-1423\", \"self\": \"https://acme.atlassian.net/rest/api/3/issue/10423\", \"fields\": {\"summary\": \"Checkout reserve step times out during the evening sale\", \"description\": \"Customers cannot finish checkout during peak hours.\\n\\nSteps to reproduce:\\n1. Add two products to the cart\\n2. Open /checkout and press Pay\\n3. Wait on the Reserving stock spinner\\n\\nExpected: the order is reserved within 2 seconds.\\nActual: after 30 seconds the page shows \\\"Lock wait timeout exceeded; try restarting transaction\\\".\\n\\nReported by ops on-call (ops-oncall@acme.com).\", \"status\": {\"name\": \"Open\"}, \"priority\": {\"name\": \"High\"}, \"labels\": [\"checkout\"], \"components\": [{\"name\": \"checkout\"}], \"created\": \"2026-11-10T19:30:00.000+0000\", \"comment\": {\"comments\": [{\"author\": {\"displayName\": \"Priya\"}, \"body\": \"Started after Monday's release.\", \"created\": \"2026-11-10T20:00:00.000+0000\"}]}}}"
+    },
+    "commits": {
+      "tool": "github.list_commits",
+      "output": [
+        {
+          "sha": "9f1c2d3e4b5a69788796a5b4c3d2e1f0a9b8c7d6",
+          "commit": {
+            "message": "Price items inside reserveStock so totals match",
+            "author": {
+              "name": "Dev One",
+              "date": "2026-11-09T09:12:00Z"
+            }
+          },
+          "files": [
+            {
+              "filename": "src/checkout/reserve.ts"
+            }
+          ]
+        },
+        {
+          "sha": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+          "commit": {
+            "message": "Update README",
+            "author": {
+              "name": "Dev Two",
+              "date": "2026-11-08T15:00:00Z"
+            }
+          },
+          "files": [
+            {
+              "filename": "README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code_search": {
+      "tool": "github.search_code",
+      "output": {
+        "total_count": 2,
+        "items": [
+          {
+            "path": "src/checkout/reserve.ts",
+            "repository": {
+              "full_name": "acme/shop"
+            },
+            "text_matches": [
+              {
+                "fragment": "FOR UPDATE\", [items.map((i) => i.productId)]"
+              }
+            ]
+          },
+          {
+            "path": "src/checkout/ui/Spinner.tsx",
+            "repository": {
+              "full_name": "acme/shop"
+            }
+          }
+        ]
+      }
+    },
+    "file:src/checkout/reserve.ts": {
+      "tool": "github.get_file_contents",
+      "output": {
+        "path": "src/checkout/reserve.ts",
+        "sha": "c0ffee1234",
+        "encoding": "base64",
+        "content": "aW1wb3J0IHsgZGIgfSBmcm9tICIuLi9kYiI7CgpleHBvcnQgYXN5bmMgZnVuY3Rpb24gcmVzZXJ2ZVN0b2NrKG9yZGVySWQ6IHN0cmluZywgaXRlbXM6IEl0ZW1bXSkgewogIHJldHVybiBkYi50cmFuc2FjdGlvbihhc3luYyAodHgpID0+IHsKICAgIC8vIExvY2sgZXZlcnkgcHJvZHVjdCByb3cgZm9yIHRoZSB3aG9sZSBvcmRlciBiZWZvcmUgY2hlY2tpbmcgc3RvY2suCiAgICBjb25zdCByb3dzID0gYXdhaXQgdHgucXVlcnkoIlNFTEVDVCBpZCwgc3RvY2sgRlJPTSBwcm9kdWN0cyBXSEVSRSBpZCA9IEFOWSgkMSkgRk9SIFVQREFURSIsIFtpdGVtcy5tYXAoKGkpID0+IGkucHJvZHVjdElkKV0pOwogICAgYXdhaXQgc2xlZXBGb3JQcmljaW5nKCk7IC8vIGNhbGxzIHRoZSBwcmljaW5nIHNlcnZpY2Ugd2hpbGUgdGhlIHJvd3Mgc3RheSBsb2NrZWQKICAgIGZvciAoY29uc3QgaXRlbSBvZiBpdGVtcykgewogICAgICBjb25zdCByb3cgPSByb3dzLmZpbmQoKHIpID0+IHIuaWQgPT09IGl0ZW0ucHJvZHVjdElkKTsKICAgICAgaWYgKCFyb3cgfHwgcm93LnN0b2NrIDwgaXRlbS5xdHkpIHRocm93IG5ldyBPdXRPZlN0b2NrKGl0ZW0ucHJvZHVjdElkKTsKICAgIH0KICAgIGF3YWl0IHR4LnF1ZXJ5KCJVUERBVEUgcHJvZHVjdHMgU0VUIHN0b2NrID0gc3RvY2sgLSAkMiBXSEVSRSBpZCA9ICQxIiwgW29yZGVySWQsIGl0ZW1zLmxlbmd0aF0pOwogIH0pOwp9Cg=="
+      }
+    },
+    "docs": {
+      "tool": "confluence_search",
+      "output": {
+        "results": [
+          {
+            "title": "Checkout runbook",
+            "url": "https://acme.atlassian.net/wiki/x/123",
+            "excerpt": "<p>If reserve times out, check row locks on products.</p>"
+          }
+        ]
+      }
+    },
+    "logs": {
+      "tool": "datadog.logs_search",
+      "output": "2026-11-10T19:29:41Z ERROR checkout.reserve lock wait timeout exceeded order=88123 user=ops-oncall@acme.com\n2026-11-10T19:29:43Z WARN checkout.reserve slow transaction 29812ms\n2026-11-10T19:30:02Z INFO checkout.health ok"
+    }
+  }
+}

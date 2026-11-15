@@ -108,9 +108,12 @@ export type ValidationResult = {
   checks: ValidationCheck[];
 };
 
-export type EvidenceType = "trace" | "log" | "metric" | "source";
+// The first four types and two origins are the demo catalog's. The rest are
+// added for evidence read through connectors/ (code host, database, ticket
+// tool, logs, docs). The frozen rules only ever see the demo ones.
+export type EvidenceType = "trace" | "log" | "metric" | "source" | "commit" | "diff" | "issue" | "schema" | "ticket" | "doc";
 
-export type EvidenceOrigin = "executed-sandbox" | "workspace-source";
+export type EvidenceOrigin = "executed-sandbox" | "workspace-source" | "connector";
 
 export type EvidenceIndexItem = {
   id: string;

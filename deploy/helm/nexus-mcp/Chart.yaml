@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nexus-mcp
+description: Nexus MCP server (HTTP mode) inside the customer's network. Stub; review before use.
+type: application
+version: 0.2.0
+appVersion: "0.2.0"

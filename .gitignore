@@ -8,6 +8,7 @@ node_modules
 
 # Next.js
 /.next/
+/.next-*/
 /out/
 
 # Production
@@ -21,6 +22,7 @@ node_modules
 # Environment variables
 .env*
 !.env.example
+!.env.development
 
 # Debug logs
 npm-debug.log*
@@ -31,6 +33,9 @@ yarn-error.log*
 .DS_Store
 *.pem
 
+# TypeScript
+*.tsbuildinfo
+
 # IDEs
 .idea/
 *.suo
@@ -39,3 +44,17 @@ yarn-error.log*
 *.sln
 *.sw?
 
+
+# Local pilot-form submissions (personal data, never commit)
+/.data/
+
+# Nexus admin database (local, contains hashes and encrypted secrets)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+/extensions/vscode-nexus/dist
+*.vsix
+/packages/nexus-mcp/dist
+/packages/nexus-mcp/services
+/packages/nexus-mcp/node_modules
+/nexus-mcp-*.tgz

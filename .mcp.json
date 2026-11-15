@@ -7,6 +7,15 @@
         "tsx",
         "services/mcp/server.ts"
       ]
+    },
+    "nexus-ide": {
+      "type": "stdio",
+      "command": "npm",
+      "args": [
+        "run",
+        "--silent",
+        "dev:ide"
+      ]
     }
   }
 }

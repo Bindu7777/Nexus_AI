@@ -1,0 +1,170 @@
+{
+  "recordedAt": "2026-11-11T16:44:28.577Z",
+  "note": "Raw samples from one live outage run of services/catalog/server.mjs.",
+  "outage": [
+    {
+      "index": 0,
+      "phase": "outage",
+      "productId": "orion-90",
+      "status": 503,
+      "latencyMs": 1.02,
+      "error": "catalog_unavailable",
+      "traceId": "26c0a115-d21a-4be7-ad37-ee302da57117",
+      "logId": "log_1",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.04,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.572Z"
+    },
+    {
+      "index": 1,
+      "phase": "outage",
+      "productId": "brass-sextant",
+      "status": 503,
+      "latencyMs": 2.41,
+      "error": "catalog_unavailable",
+      "traceId": "29c4e1c3-ea22-48cf-a38f-050a81acff01",
+      "logId": "log_2",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.573Z"
+    },
+    {
+      "index": 2,
+      "phase": "outage",
+      "productId": "lunar-atlas",
+      "status": 503,
+      "latencyMs": 2.96,
+      "error": "catalog_unavailable",
+      "traceId": "87cb370d-57be-47a8-bdec-6e32ae4c1944",
+      "logId": "log_3",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.574Z"
+    },
+    {
+      "index": 3,
+      "phase": "outage",
+      "productId": "campo-slice",
+      "status": 503,
+      "latencyMs": 3.41,
+      "error": "catalog_unavailable",
+      "traceId": "c4428811-dff7-4518-bad0-e640f06cc572",
+      "logId": "log_4",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.574Z"
+    },
+    {
+      "index": 4,
+      "phase": "outage",
+      "productId": "andromeda-chart",
+      "status": 503,
+      "latencyMs": 2.61,
+      "error": "catalog_unavailable",
+      "traceId": "bb701b33-fddd-415c-8f2f-194a006e609c",
+      "logId": "log_5",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.575Z"
+    },
+    {
+      "index": 5,
+      "phase": "outage",
+      "productId": "solar-filter",
+      "status": 503,
+      "latencyMs": 2.06,
+      "error": "catalog_unavailable",
+      "traceId": "7df4f9c9-d6a2-4641-a0eb-40a8b7c03552",
+      "logId": "log_6",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.575Z"
+    },
+    {
+      "index": 6,
+      "phase": "outage",
+      "productId": "eq-mount",
+      "status": 503,
+      "latencyMs": 1.81,
+      "error": "catalog_unavailable",
+      "traceId": "76a96307-3ff7-4d1f-810f-d94a2f8368c8",
+      "logId": "log_7",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.576Z"
+    },
+    {
+      "index": 7,
+      "phase": "outage",
+      "productId": "cloth-logbook",
+      "status": 503,
+      "latencyMs": 1.73,
+      "error": "catalog_unavailable",
+      "traceId": "56c21b82-7358-4100-97b6-c90a2722e16c",
+      "logId": "log_8",
+      "lockWaitMs": null,
+      "lockHoldMs": null,
+      "queueDepth": null,
+      "serverDurationMs": 0.01,
+      "mode": "unavailable",
+      "completedAt": "2026-11-11T16:44:28.576Z"
+    }
+  ],
+  "telemetry": {
+    "logs": [
+      {
+        "id": "log_1",
+        "level": "error"
+      },
+      {
+        "id": "log_2",
+        "level": "error"
+      },
+      {
+        "id": "log_3",
+        "level": "error"
+      },
+      {
+        "id": "log_4",
+        "level": "error"
+      },
+      {
+        "id": "log_5",
+        "level": "error"
+      },
+      {
+        "id": "log_6",
+        "level": "error"
+      },
+      {
+        "id": "log_7",
+        "level": "error"
+      },
+      {
+        "id": "log_8",
+        "level": "error"
+      }
+    ]
+  }
+}

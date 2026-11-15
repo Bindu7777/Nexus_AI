@@ -65,6 +65,28 @@ Offline example, no Jira credentials: `/investigate NI-1042`. That seeded ticket
 
 The catalog from `npm run demo` must be running before an IDE agent measures the service. The MCP server is started by the IDE and talks to that catalog.
 
+## Engineer mode: investigate from your IDE
+
+A second MCP server, `nexus-mcp` (`services/mcp/ide-server.ts`), and the VS Code
+extension in `extensions/vscode-nexus` let an engineer investigate a defect
+without leaving the editor. Nexus decides what evidence it needs and what it
+means; the IDE's agent fetches each piece with the engineer's own connected
+tools (Jira, GitHub, a database, docs) and passes the raw results back. Nexus
+holds no source credentials in this mode and never writes to those systems.
+Reproduction and proof run in Nexus's own sandbox, and a suggested fix is a
+patch the engineer applies themselves.
+
+```bash
+npm run dev:ide                 # the server, stdio, against the seeded demo company
+npm run ide:fixture -- tests/ide/fixtures/nex-5.json   # a fixture agent plays the IDE's part
+npm run ide-extension:package   # nexus-vscode-0.2.0.vsix, installs from disk
+npm run nexus-mcp:pack          # nexus-mcp-0.2.0.tgz, the nexus-mcp command
+npm run start:ide-http          # HTTP mode with OAuth 2.1 sign-in, inside your network
+```
+
+Setup for VS Code, Cursor and Claude Code, connecting your own tools, HTTP mode,
+the container image and the Helm stub: [docs/ide-setup.md](docs/ide-setup.md).
+
 ## Live Jira
 
 The adapter reads one issue with HTTP GET. It never creates, edits, or transitions an issue. Project key `NEX` (project name NEXUS) at https://nexusintelligence.atlassian.net. Issue type name: `Defect test`. Label `nexus-demo` marks simulated sandbox data.

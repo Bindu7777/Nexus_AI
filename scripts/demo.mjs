@@ -34,7 +34,8 @@ process.on("SIGTERM", () => shutdown(0));
 
 console.log("");
 console.log("Nexus Intelligence sandbox demo");
-console.log(`  Web      http://127.0.0.1:${webPort}`);
+console.log(`  Site     http://127.0.0.1:${webPort}`);
+console.log(`  Console  http://127.0.0.1:${webPort}/console`);
 console.log(`  Catalog  http://127.0.0.1:${catalogPort}  (localhost only)`);
 console.log("  The web process binds 0.0.0.0 so a local preview can reach it.");
 console.log("  Diagnosis is rule-based. No model key and no Jira connection are used.");
